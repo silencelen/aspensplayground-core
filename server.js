@@ -28,7 +28,12 @@ function loadLeaderboard() {
     try {
         if (fs.existsSync(LEADERBOARD_FILE)) {
             const data = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
-            leaderboard = JSON.parse(data);
+            const parsed = JSON.parse(data);
+            // Validate parsed data is an array
+            if (!Array.isArray(parsed)) {
+                throw new Error('Leaderboard data is not an array');
+            }
+            leaderboard = parsed;
             log(`Loaded ${leaderboard.length} leaderboard entries`, 'SUCCESS');
         } else {
             leaderboard = [];
@@ -38,6 +43,13 @@ function loadLeaderboard() {
     } catch (e) {
         log(`Error loading leaderboard: ${e.message}`, 'ERROR');
         leaderboard = [];
+        // Backup corrupted file and create fresh one
+        if (fs.existsSync(LEADERBOARD_FILE)) {
+            const backupPath = LEADERBOARD_FILE + '.corrupt.' + Date.now();
+            fs.renameSync(LEADERBOARD_FILE, backupPath);
+            log(`Corrupted file backed up to ${backupPath}`, 'WARN');
+        }
+        saveLeaderboard();
     }
 }
 

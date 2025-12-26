@@ -516,6 +516,7 @@ const Pathfinder = {
 
         // A* algorithm
         const openSet = [];
+        const openSetKeys = new Set(); // O(1) membership check optimization
         const closedSet = new Set();
         const cameFrom = new Map();
         const gScore = new Map();
@@ -525,6 +526,7 @@ const Pathfinder = {
         gScore.set(startKey, 0);
         fScore.set(startKey, this.heuristic(startGX, startGZ, goalGX, goalGZ));
         openSet.push({ x: startGX, z: startGZ, f: fScore.get(startKey) });
+        openSetKeys.add(startKey);
 
         const maxIterations = 2000; // Prevent infinite loops
         let iterations = 0;
@@ -536,6 +538,7 @@ const Pathfinder = {
             openSet.sort((a, b) => a.f - b.f);
             const current = openSet.shift();
             const currentKey = `${current.x},${current.z}`;
+            openSetKeys.delete(currentKey);
 
             // Reached goal?
             if (current.x === goalGX && current.z === goalGZ) {
@@ -580,9 +583,10 @@ const Pathfinder = {
                     const f = tentativeG + this.heuristic(neighbor.x, neighbor.z, goalGX, goalGZ);
                     fScore.set(neighborKey, f);
 
-                    // Add to open set if not already there
-                    if (!openSet.some(n => n.x === neighbor.x && n.z === neighbor.z)) {
+                    // Add to open set if not already there (O(1) lookup)
+                    if (!openSetKeys.has(neighborKey)) {
                         openSet.push({ x: neighbor.x, z: neighbor.z, f });
+                        openSetKeys.add(neighborKey);
                     }
                 }
             }
@@ -1547,6 +1551,7 @@ const COSMETICS = {
 let selectedCosmetic = 'default';
 let cosmeticPreviewScenes = {};
 let cosmeticPreviewRenderers = {};
+let cosmeticPreviewRAFs = {}; // Track RAF IDs for proper cleanup
 
 function loadSelectedCosmetic() {
     const saved = localStorage.getItem('selectedCosmetic');
@@ -1655,18 +1660,27 @@ function initCosmeticPreviews() {
         cosmeticPreviewScenes[cosmeticId] = { scene, camera, character };
         cosmeticPreviewRenderers[cosmeticId] = renderer;
 
-        // Animate rotation
+        // Animate rotation with cancellable RAF
         function animatePreview() {
             if (!cosmeticPreviewRenderers[cosmeticId]) return;
             character.rotation.y += 0.01;
             renderer.render(scene, camera);
-            requestAnimationFrame(animatePreview);
+            cosmeticPreviewRAFs[cosmeticId] = requestAnimationFrame(animatePreview);
         }
         animatePreview();
     });
 }
 
 function cleanupCosmeticPreviews() {
+    // Cancel all RAF callbacks first
+    Object.keys(cosmeticPreviewRAFs).forEach(id => {
+        if (cosmeticPreviewRAFs[id]) {
+            cancelAnimationFrame(cosmeticPreviewRAFs[id]);
+        }
+    });
+    cosmeticPreviewRAFs = {};
+
+    // Then dispose renderers
     Object.keys(cosmeticPreviewRenderers).forEach(id => {
         const renderer = cosmeticPreviewRenderers[id];
         if (renderer) {
@@ -2697,6 +2711,10 @@ function spawnBloodParticles(position, count = 8) {
         if (particlePool.blood.length > 0) {
             particle = particlePool.blood.pop();
             particle.mesh.visible = true;
+            // Reset opacity from previous use
+            if (particle.mesh.material) {
+                particle.mesh.material.opacity = 1;
+            }
         } else {
             const geo = new THREE.SphereGeometry(0.03 + Math.random() * 0.02, 4, 4);
             const mesh = new THREE.Mesh(geo, bloodMat.clone());
@@ -6917,9 +6935,9 @@ function initMobileControls() {
         let dx = touch.clientX - centerX;
         let dy = touch.clientY - centerY;
 
-        // Clamp to radius
+        // Clamp to radius (with divide-by-zero protection)
         const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance > joystickRadius) {
+        if (distance > 0 && distance > joystickRadius) {
             dx = (dx / distance) * joystickRadius;
             dy = (dy / distance) * joystickRadius;
         }
@@ -7425,7 +7443,10 @@ function shoot() {
 
             zombies.forEach((zombie, id) => {
                 if (zombie.mesh === rootMesh) {
-                    const isHeadshot = intersects[0].point.y > zombie.mesh.position.y + 1.5 * (zombie.scale || 1);
+                    // Headshot if hit above neck height (1.5 * scale from ground)
+                    // Use ground reference (0) instead of mesh.position.y which bounces during animation
+                    const headHeight = 1.5 * (zombie.scale || 1);
+                    const isHeadshot = intersects[0].point.y > headHeight;
                     const damage = isHeadshot ? stats.damage * 2 : stats.damage;
 
                     createBloodSplatter(intersects[0].point);
@@ -8123,7 +8144,9 @@ function fireLaser(origin, direction, damage) {
 
         zombies.forEach((zombie, id) => {
             if (zombie.mesh === rootMesh) {
-                const isHeadshot = intersects[0].point.y > zombie.mesh.position.y + 1.5 * (zombie.scale || 1);
+                // Headshot if hit above neck height (1.5 * scale from ground)
+                const headHeight = 1.5 * (zombie.scale || 1);
+                const isHeadshot = intersects[0].point.y > headHeight;
                 const actualDamage = isHeadshot ? damage * 1.5 : damage;
                 showHitMarker(isHeadshot, intersects[0].point);
                 if (GameState.mode === 'singleplayer') {
