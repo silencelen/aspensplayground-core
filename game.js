@@ -239,6 +239,16 @@ function applySettings() {
     }
 }
 
+// Debounced version for slider input events (prevents excessive updates)
+let applySettingsTimeout = null;
+function applySettingsDebounced() {
+    if (applySettingsTimeout) clearTimeout(applySettingsTimeout);
+    applySettingsTimeout = setTimeout(() => {
+        applySettings();
+        applySettingsTimeout = null;
+    }, 50); // 50ms debounce
+}
+
 function resetSettings() {
     userSettings = { ...DEFAULT_SETTINGS };
     saveSettings();
@@ -1913,11 +1923,11 @@ function initSettingsMenu() {
         resetSettings();
     });
 
-    // Sensitivity slider
+    // Sensitivity slider (debounced to prevent excessive updates while dragging)
     document.getElementById('sensitivity-slider')?.addEventListener('input', (e) => {
         userSettings.mouseSensitivity = parseFloat(e.target.value);
         document.getElementById('sensitivity-value').textContent = userSettings.mouseSensitivity.toFixed(2);
-        applySettings();
+        applySettingsDebounced();
     });
 
     // Master volume slider
@@ -1938,11 +1948,11 @@ function initSettingsMenu() {
         document.getElementById('music-volume-value').textContent = Math.round(userSettings.musicVolume * 100) + '%';
     });
 
-    // FOV slider
+    // FOV slider (debounced to prevent excessive updates while dragging)
     document.getElementById('fov-slider')?.addEventListener('input', (e) => {
         userSettings.fieldOfView = parseInt(e.target.value);
         document.getElementById('fov-value').textContent = userSettings.fieldOfView + '°';
-        applySettings();
+        applySettingsDebounced();
     });
 
     // Graphics quality
@@ -2728,12 +2738,20 @@ function spawnBloodParticles(position, count = 8) {
             position.z + (Math.random() - 0.5) * 0.3
         );
 
-        // Random velocity
-        particle.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 4,
-            Math.random() * 3 + 1,
-            (Math.random() - 0.5) * 4
-        );
+        // Random velocity (reuse existing Vector3 if available)
+        if (particle.velocity) {
+            particle.velocity.set(
+                (Math.random() - 0.5) * 4,
+                Math.random() * 3 + 1,
+                (Math.random() - 0.5) * 4
+            );
+        } else {
+            particle.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 4,
+                Math.random() * 3 + 1,
+                (Math.random() - 0.5) * 4
+            );
+        }
 
         particle.life = 1.0;
         particle.decay = 0.8 + Math.random() * 0.4;
@@ -2770,17 +2788,34 @@ function spawnShellCasing(position, direction) {
     particle.mesh.position.copy(position);
     particle.mesh.position.add(right.multiplyScalar(0.2));
 
-    particle.velocity = new THREE.Vector3(
-        right.x * 3 + (Math.random() - 0.5),
-        2 + Math.random(),
-        right.z * 3 + (Math.random() - 0.5)
-    );
+    // Reuse existing Vector3 objects if available
+    if (particle.velocity) {
+        particle.velocity.set(
+            right.x * 3 + (Math.random() - 0.5),
+            2 + Math.random(),
+            right.z * 3 + (Math.random() - 0.5)
+        );
+    } else {
+        particle.velocity = new THREE.Vector3(
+            right.x * 3 + (Math.random() - 0.5),
+            2 + Math.random(),
+            right.z * 3 + (Math.random() - 0.5)
+        );
+    }
 
-    particle.angularVelocity = new THREE.Vector3(
-        Math.random() * 10,
-        Math.random() * 10,
-        Math.random() * 10
-    );
+    if (particle.angularVelocity) {
+        particle.angularVelocity.set(
+            Math.random() * 10,
+            Math.random() * 10,
+            Math.random() * 10
+        );
+    } else {
+        particle.angularVelocity = new THREE.Vector3(
+            Math.random() * 10,
+            Math.random() * 10,
+            Math.random() * 10
+        );
+    }
 
     particle.life = 1.0;
     particle.decay = 0.3;
@@ -2810,17 +2845,34 @@ function spawnDebris(position, count = 5) {
 
         particle.mesh.position.copy(position);
 
-        particle.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 5,
-            Math.random() * 4 + 2,
-            (Math.random() - 0.5) * 5
-        );
+        // Reuse existing Vector3 objects if available
+        if (particle.velocity) {
+            particle.velocity.set(
+                (Math.random() - 0.5) * 5,
+                Math.random() * 4 + 2,
+                (Math.random() - 0.5) * 5
+            );
+        } else {
+            particle.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 5,
+                Math.random() * 4 + 2,
+                (Math.random() - 0.5) * 5
+            );
+        }
 
-        particle.angularVelocity = new THREE.Vector3(
-            Math.random() * 8,
-            Math.random() * 8,
-            Math.random() * 8
-        );
+        if (particle.angularVelocity) {
+            particle.angularVelocity.set(
+                Math.random() * 8,
+                Math.random() * 8,
+                Math.random() * 8
+            );
+        } else {
+            particle.angularVelocity = new THREE.Vector3(
+                Math.random() * 8,
+                Math.random() * 8,
+                Math.random() * 8
+            );
+        }
 
         particle.life = 1.0;
         particle.decay = 0.5 + Math.random() * 0.3;
@@ -3103,7 +3155,15 @@ function handleServerMessage(message) {
 
 function sendToServer(message) {
     if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(message));
+        try {
+            socket.send(JSON.stringify(message));
+        } catch (e) {
+            DebugLog.log(`WebSocket send error: ${e.message}`, 'error');
+            // Socket may have closed between readyState check and send
+            if (socket.readyState !== WebSocket.OPEN) {
+                GameState.isConnected = false;
+            }
+        }
     }
 }
 

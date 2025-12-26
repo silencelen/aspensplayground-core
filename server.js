@@ -734,7 +734,11 @@ function broadcast(message, excludeId = null) {
     const data = JSON.stringify(message);
     GameState.players.forEach((player, id) => {
         if (id !== excludeId && player.ws && player.ws.readyState === WebSocket.OPEN) {
-            player.ws.send(data);
+            try {
+                player.ws.send(data);
+            } catch (e) {
+                log(`WebSocket send error to ${id}: ${e.message}`, 'ERROR');
+            }
         }
     });
 }
