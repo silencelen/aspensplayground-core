@@ -1,0 +1,14 @@
+{
+  "name": "aspens-playground",
+  "version": "1.0.0",
+  "description": "Multiplayer zombie shooter in a haunted Chuck E. Cheese",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "uuid": "^9.0.0"
+  }
+}

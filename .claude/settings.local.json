@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes serve -l 3000)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(node --check:*)",
+      "Bash(npm install)",
+      "Bash(node:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist:*)",
+      "Bash(curl:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(dir:*)",
+      "Bash(del //f \"C:\\\\Apps\\\\aspensplayground\\\\NUL\")",
+      "Bash(git commit:*)"
+    ]
+  }
+}
