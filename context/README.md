@@ -18,6 +18,8 @@ This folder contains documentation designed to help AI code editors (like Claude
 | Add environment object | COLLISION.md | game.js (createWorld section) |
 | Modify UI | UI_MOBILE.md | index.html |
 | Change multiplayer | MULTIPLAYER.md | game.js, server.js |
+| Modify leaderboard | LEADERBOARD.md | game.js, server.js |
+| Add dev settings | DEV_SETTINGS.md | game.js (DevSettings object) |
 
 ### Code Navigation Tips
 
@@ -45,10 +47,12 @@ The `game.js` file is large (~12,000 lines). Use these landmarks:
 |------|----------|
 | ARCHITECTURE.md | Overall structure, file layout, key sections |
 | ZOMBIE_AI.md | Pathfinding, zombie types, abilities |
-| MULTIPLAYER.md | WebSocket protocol, lobby system, sync |
+| MULTIPLAYER.md | WebSocket protocol, lobby system, sync throttling |
 | COLLISION.md | AABB system, jump-over heights |
-| WEAPONS_UPGRADES.md | Weapon stats, upgrade shop, ammo |
+| WEAPONS_UPGRADES.md | Weapon stats, upgrade shop, ammo, rendering |
 | UI_MOBILE.md | HUD, mobile controls, responsive design |
+| LEADERBOARD.md | Global leaderboard, score submission, API |
+| DEV_SETTINGS.md | God mode, developer tools, debug features |
 
 ## Postulates (Design Decisions)
 
@@ -58,6 +62,8 @@ The `game.js` file is large (~12,000 lines). Use these landmarks:
 4. **Coarse NavGrid + Fine steering**: Balance performance and smoothness
 5. **localStorage for persistence**: No backend DB needed for saves
 6. **CSS-in-HTML**: Styles in index.html for single-file deployment
+7. **File-based leaderboard**: JSON file storage for simplicity, no external DB
+8. **God mode protection**: Dev features prevent cheated leaderboard entries
 
 ## Known Limitations
 

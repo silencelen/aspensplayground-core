@@ -14,7 +14,8 @@ A 3D zombie survival shooter game set in a haunted Chuck E. Cheese-style venue. 
 ### Main Files
 - `index.html` - Single-page application containing all HTML, CSS, and game container
 - `game.js` - Main game logic (~12,000+ lines, contains all game systems)
-- `server.js` - WebSocket server for multiplayer lobby and game state synchronization
+- `server.js` - WebSocket server for multiplayer lobby, game state sync, and leaderboard API
+- `leaderboard.json` - Persistent storage for global leaderboard (auto-generated)
 
 ### Modules Directory (`modules/`)
 The code has been split into logical modules for better organization:
@@ -28,9 +29,17 @@ Note: game.js currently contains inline copies of these modules for backwards co
 
 #### Configuration & State (1-1000)
 - `CONFIG` object - Game constants (arena size, player stats, weapons, etc.)
+- `DevSettings` object - Developer settings (godMode toggle)
 - `GameState` object - Global game state flags
 - `playerState` object - Local player health, position, score
 - `DebugLog` utility - Categorized console logging with color coding
+
+#### Leaderboard System (521-644)
+- `fetchLeaderboard()` - GET request to server API
+- `submitScore()` - POST score with name, wave, kills
+- `renderLeaderboard()` - Displays top 10 in UI
+- `getPlayerName()` - Prompts user for name on new high score
+- `initLeaderboard()` - Loads leaderboard on game start
 
 #### Weapon System (1000-1200)
 - `WeaponUpgrades` object - Between-wave upgrade shop system
@@ -64,9 +73,17 @@ Note: game.js currently contains inline copies of these modules for backwards co
 
 #### Rendering & Animation (7000-8500)
 - Camera controls (desktop mouse, mobile joystick)
-- Weapon rendering and animations
+- Weapon rendering and animations (with emissive lighting for visibility)
 - Zombie skeletal animation system
 - Particle effects (muzzle flash, blood, explosions)
+
+#### Minimap System (~8790-8850)
+- Canvas-based radar showing zombies, players, obstacles
+- Player-relative coordinate transformation:
+  - Uses rotation matrix for proper orientation
+  - `localRight = dx * cosT - dz * sinT`
+  - `localForward = -dx * sinT - dz * cosT`
+  - Player always centered, facing up
 
 #### UI & HUD (8500-9500)
 - HUD updates (health, ammo, wave, score)

@@ -71,6 +71,15 @@ LobbyState.players = new Map()  // playerId -> {id, name, isReady, color, cosmet
 - Clients interpolate remote player positions
 - Uses `Interpolation.applyInterpolation()` for smooth movement
 
+### Sync Throttling (Anti-Freeze)
+- `handleSync()` limited to max 20 syncs per second (50ms throttle)
+- Prevents CPU overload from rapid sync messages
+- Uses `lastSyncProcess` timestamp to track throttling:
+```javascript
+const SYNC_THROTTLE_MS = 50;
+if (now - lastSyncProcess < SYNC_THROTTLE_MS) return;
+```
+
 ### Zombie Authority
 - In multiplayer, server is authoritative for zombie positions
 - Clients can fire and hit zombies locally for responsiveness

@@ -18,6 +18,21 @@ Weapons are defined in `CONFIG.weapons` array (index 0-4):
 - Switching plays animation via `animateWeaponSwitch()`
 - Cannot switch during reload
 
+## Weapon Rendering
+- All weapon materials use `MeshStandardMaterial` with emissive properties
+- `emissive` color matches base color, `emissiveIntensity: 0.08` (8%)
+- Ensures weapon is always visible even in dark areas
+- Example material:
+```javascript
+const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x333333,
+    metalness: 0.4,
+    roughness: 0.6,
+    emissive: 0x333333,
+    emissiveIntensity: 0.08
+});
+```
+
 ## Upgrade Shop System
 
 ### When It Appears
