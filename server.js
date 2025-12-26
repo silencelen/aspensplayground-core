@@ -449,10 +449,14 @@ function killZombie(zombieId, killerId, isHeadshot) {
 function spawnPickup(position, type) {
     const id = `pickup_${++GameState.lastPickupId}`;
 
+    // Add small random offset to prevent instant collection when standing on kill spot
+    const offsetX = (Math.random() - 0.5) * 1.5;
+    const offsetZ = (Math.random() - 0.5) * 1.5;
+
     const pickup = {
         id: id,
         type: type,
-        position: { x: position.x, y: 0.5, z: position.z }
+        position: { x: position.x + offsetX, y: 0.5, z: position.z + offsetZ }
     };
 
     GameState.pickups.set(id, pickup);

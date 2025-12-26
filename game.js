@@ -9,6 +9,24 @@ const DevSettings = {
     godMode: false  // When true, player takes no damage in singleplayer
 };
 
+// ==================== STATIC VECTOR3 CONSTANTS ====================
+// Reusable Vector3 objects to reduce garbage collection pressure
+const Vec3 = {
+    UP: null,      // (0, 1, 0) - initialized after THREE.js loads
+    RIGHT: null,   // (1, 0, 0)
+    FORWARD: null, // (0, 0, 1)
+    temp: null,    // Temporary vector for calculations
+    temp2: null,   // Second temporary vector
+
+    init() {
+        this.UP = new THREE.Vector3(0, 1, 0);
+        this.RIGHT = new THREE.Vector3(1, 0, 0);
+        this.FORWARD = new THREE.Vector3(0, 0, 1);
+        this.temp = new THREE.Vector3();
+        this.temp2 = new THREE.Vector3();
+    }
+};
+
 // Collision objects for camera bounds
 const collisionObjects = [];
 
@@ -653,24 +671,44 @@ const Pathfinder = {
     },
 
     // Check line of sight between two points using actual obstacle collision
+    // Optimized: pre-filter obstacles using bounding box, then check only relevant ones
     hasLineOfSight(x1, z1, x2, z2) {
         const dx = x2 - x1;
         const dz = z2 - z1;
         const dist = Math.sqrt(dx * dx + dz * dz);
         if (dist < 0.1) return true;
 
-        // Check against actual obstacles with fine-grained steps
-        const stepSize = 0.3; // Small steps for accuracy
-        const steps = Math.ceil(dist / stepSize);
         const radius = 0.4; // Zombie collision radius
+
+        // Calculate bounding box of the line (expanded by radius)
+        const lineMinX = Math.min(x1, x2) - radius;
+        const lineMaxX = Math.max(x1, x2) + radius;
+        const lineMinZ = Math.min(z1, z2) - radius;
+        const lineMaxZ = Math.max(z1, z2) + radius;
+
+        // Pre-filter: only check obstacles that could possibly intersect
+        const relevantObstacles = [];
+        for (const obs of obstacles) {
+            if (obs.maxX >= lineMinX && obs.minX <= lineMaxX &&
+                obs.maxZ >= lineMinZ && obs.minZ <= lineMaxZ) {
+                relevantObstacles.push(obs);
+            }
+        }
+
+        // If no obstacles in the way, clear line of sight
+        if (relevantObstacles.length === 0) return true;
+
+        // Check against filtered obstacles with fine-grained steps
+        const stepSize = 0.3;
+        const steps = Math.ceil(dist / stepSize);
 
         for (let i = 1; i <= steps; i++) {
             const t = i / steps;
             const x = x1 + dx * t;
             const z = z1 + dz * t;
 
-            // Check collision with each obstacle
-            for (const obs of obstacles) {
+            // Check collision only with relevant obstacles
+            for (const obs of relevantObstacles) {
                 if (x + radius > obs.minX && x - radius < obs.maxX &&
                     z + radius > obs.minZ && z - radius < obs.maxZ) {
                     return false;
@@ -1984,6 +2022,9 @@ async function initLeaderboard() {
 function initThreeJS() {
     DebugLog.log('Initializing Three.js renderer...', 'info');
 
+    // Initialize static Vector3 constants
+    Vec3.init();
+
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0a);
     scene.fog = new THREE.Fog(0x0a0a0a, 5, 40);
@@ -2012,6 +2053,15 @@ function initAudio() {
     } catch (e) {
         DebugLog.log('Audio not supported: ' + e.message, 'warn');
     }
+}
+
+// Check if audio context is ready for use
+function isAudioReady() {
+    if (!audioContext) return false;
+    if (audioContext.state === 'closed') return false;
+    // Check for NaN currentTime (can happen in edge cases)
+    if (isNaN(audioContext.currentTime)) return false;
+    return true;
 }
 
 // Pre-warm the audio system to prevent first-shot lag
@@ -2533,7 +2583,7 @@ function updateFootsteps(delta, isMoving, isSprinting) {
 }
 
 function playFootstepSound() {
-    if (!audioContext) return;
+    if (!isAudioReady()) return;
 
     try {
         // Create noise for footstep
@@ -2565,7 +2615,7 @@ function playFootstepSound() {
 }
 
 function playZombieDeathSound(position) {
-    if (!audioContext) return;
+    if (!isAudioReady()) return;
 
     try {
         const oscillator = audioContext.createOscillator();
@@ -2781,12 +2831,11 @@ function spawnShellCasing(position, direction) {
         particle = { mesh, type: 'shell' };
     }
 
-    // Eject to the right of the weapon
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-    const up = new THREE.Vector3(0, 1, 0);
+    // Eject to the right of the weapon (use static vector to avoid allocation)
+    const right = Vec3.temp.copy(Vec3.RIGHT).applyQuaternion(camera.quaternion);
 
     particle.mesh.position.copy(position);
-    particle.mesh.position.add(right.multiplyScalar(0.2));
+    particle.mesh.position.add(Vec3.temp2.copy(right).multiplyScalar(0.2));
 
     // Reuse existing Vector3 objects if available
     if (particle.velocity) {
@@ -8282,9 +8331,8 @@ function createLaserBeamVisual(start, end, continuous = false) {
         // Orient cylinder to point from start to end
         // Cylinder's default orientation is along Y axis
         // We need to rotate it to align with our direction
-        const up = new THREE.Vector3(0, 1, 0);
         const quaternion = new THREE.Quaternion();
-        quaternion.setFromUnitVectors(up, direction);
+        quaternion.setFromUnitVectors(Vec3.UP, direction);
         mesh.quaternion.copy(quaternion);
 
         return mesh;
@@ -9504,7 +9552,7 @@ function updatePlayer(delta) {
         moveDirection.normalize();
     }
 
-    moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+    moveDirection.applyAxisAngle(Vec3.UP, player.rotation.y);
 
     // Sprint - no stamina limit
     const speed = CONFIG.player.speed * (keys.sprint ? CONFIG.player.sprintMultiplier : 1);
