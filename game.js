@@ -932,7 +932,11 @@ const keys = {
     backward: false,
     left: false,
     right: false,
-    sprint: false
+    sprint: false,
+    lookUp: false,
+    lookDown: false,
+    lookLeft: false,
+    lookRight: false
 };
 
 // ==================== WEAPON SYSTEM ====================
@@ -7776,6 +7780,10 @@ function onKeyDown(event) {
         case 'KeyS': keys.backward = true; break;
         case 'KeyA': keys.left = true; break;
         case 'KeyD': keys.right = true; break;
+        case 'ArrowUp': keys.lookUp = true; break;
+        case 'ArrowDown': keys.lookDown = true; break;
+        case 'ArrowLeft': keys.lookLeft = true; break;
+        case 'ArrowRight': keys.lookRight = true; break;
         case 'Space':
             if (canJump) {
                 playerVelocity.y = CONFIG.player.jumpForce;
@@ -7832,6 +7840,10 @@ function onKeyUp(event) {
         case 'KeyS': keys.backward = false; break;
         case 'KeyA': keys.left = false; break;
         case 'KeyD': keys.right = false; break;
+        case 'ArrowUp': keys.lookUp = false; break;
+        case 'ArrowDown': keys.lookDown = false; break;
+        case 'ArrowLeft': keys.lookLeft = false; break;
+        case 'ArrowRight': keys.lookRight = false; break;
         case 'ShiftLeft': keys.sprint = false; break;
     }
 }
@@ -10024,6 +10036,27 @@ function animate() {
 
 function updatePlayer(delta) {
     if (!playerState.isAlive) return;
+
+    // Arrow key camera look (alternative to mouse)
+    const arrowLookSpeed = 2.0; // Radians per second
+    if (keys.lookLeft) {
+        playerState.rotation.y += arrowLookSpeed * delta;
+        player.rotation.y = playerState.rotation.y;
+    }
+    if (keys.lookRight) {
+        playerState.rotation.y -= arrowLookSpeed * delta;
+        player.rotation.y = playerState.rotation.y;
+    }
+    if (keys.lookUp) {
+        playerState.rotation.x += arrowLookSpeed * delta;
+        playerState.rotation.x = Math.min(Math.PI / 2, playerState.rotation.x);
+        camera.rotation.x = playerState.rotation.x;
+    }
+    if (keys.lookDown) {
+        playerState.rotation.x -= arrowLookSpeed * delta;
+        playerState.rotation.x = Math.max(-Math.PI / 2, playerState.rotation.x);
+        camera.rotation.x = playerState.rotation.x;
+    }
 
     // Calculate intended movement (support both keyboard and mobile input)
     const moveDirection = new THREE.Vector3();
