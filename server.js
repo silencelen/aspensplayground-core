@@ -4,13 +4,57 @@
 
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 const app = express();
-const server = http.createServer(app);
+
+// SSL Certificate paths
+const SSL_KEY_PATH = path.join(__dirname, 'ssl', 'key.pem');
+const SSL_CERT_PATH = path.join(__dirname, 'ssl', 'cert.pem');
+
+// Check if SSL certificates exist, generate if not
+function ensureSSLCerts() {
+    const sslDir = path.join(__dirname, 'ssl');
+    if (!fs.existsSync(sslDir)) {
+        fs.mkdirSync(sslDir);
+    }
+
+    if (!fs.existsSync(SSL_KEY_PATH) || !fs.existsSync(SSL_CERT_PATH)) {
+        console.log('Generating self-signed SSL certificates...');
+        try {
+            // Generate self-signed certificate using openssl
+            execSync(`openssl req -x509 -newkey rsa:2048 -keyout "${SSL_KEY_PATH}" -out "${SSL_CERT_PATH}" -days 365 -nodes -subj "/CN=localhost"`, {
+                stdio: 'pipe'
+            });
+            console.log('SSL certificates generated successfully!');
+        } catch (e) {
+            console.error('Failed to generate SSL certificates. Make sure openssl is installed.');
+            console.error('Falling back to HTTP...');
+            return false;
+        }
+    }
+    return true;
+}
+
+// Try to use HTTPS, fall back to HTTP if SSL not available
+const useSSL = ensureSSLCerts();
+let server;
+
+if (useSSL) {
+    const sslOptions = {
+        key: fs.readFileSync(SSL_KEY_PATH),
+        cert: fs.readFileSync(SSL_CERT_PATH)
+    };
+    server = https.createServer(sslOptions, app);
+} else {
+    server = http.createServer(app);
+}
+
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3000;
@@ -1436,11 +1480,15 @@ setInterval(() => {
 
 // ==================== START SERVER ====================
 server.listen(PORT, '0.0.0.0', () => {
+    const protocol = useSSL ? 'https' : 'http';
     log(`========================================`, 'SUCCESS');
     log(`ASPEN'S PLAYGROUND - Multiplayer Server`, 'SUCCESS');
     log(`========================================`, 'SUCCESS');
-    log(`Server running on port ${PORT}`, 'SUCCESS');
-    log(`Local: http://localhost:${PORT}`, 'INFO');
-    log(`Network: http://0.0.0.0:${PORT}`, 'INFO');
+    log(`Server running on port ${PORT} (${useSSL ? 'HTTPS' : 'HTTP'})`, 'SUCCESS');
+    log(`Local: ${protocol}://localhost:${PORT}`, 'INFO');
+    log(`Network: ${protocol}://0.0.0.0:${PORT}`, 'INFO');
+    if (useSSL) {
+        log(`Note: Accept the self-signed certificate warning in your browser`, 'WARN');
+    }
     log(`Waiting for players to connect...`, 'INFO');
 });
