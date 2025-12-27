@@ -12571,11 +12571,21 @@ async function quitToMenu() {
     });
     remotePlayerMeshes.clear();
 
-    // Clear spawn timer
+    // Clear spawn timer (uses setTimeout, not setInterval)
     if (GameState.spawnTimer) {
-        clearInterval(GameState.spawnTimer);
+        clearTimeout(GameState.spawnTimer);
         GameState.spawnTimer = null;
     }
+
+    // Reset shop state
+    if (WeaponUpgrades.shopCountdown) {
+        clearInterval(WeaponUpgrades.shopCountdown);
+        WeaponUpgrades.shopCountdown = null;
+    }
+    WeaponUpgrades.shopOpen = false;
+    WeaponUpgrades.localPlayerReady = false;
+    WeaponUpgrades.playersReady.clear();
+    document.getElementById('upgrade-shop').style.display = 'none';
 
     if (GameState.mode === 'singleplayer') {
         resetDestructibles();
@@ -12597,6 +12607,7 @@ async function quitToMenu() {
     GameState.totalScore = 0;
     GameState.zombiesRemaining = 0;
     GameState.zombiesSpawned = 0;
+    GameState.zombiesToSpawn = 0;
     GameState.mode = null;
     GameState.isInLobby = false;
     GameState.isReady = false;
