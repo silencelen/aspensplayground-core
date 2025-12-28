@@ -133,6 +133,187 @@ class MinHeap {
     }
 }
 
+// ==================== SPATIAL PARTITIONING GRID ====================
+// Grid-based spatial partitioning for O(1) nearby entity lookups
+// Reduces zombie targeting from O(n*m) to O(n) where n=zombies, m=players
+class SpatialGrid {
+    constructor(cellSize = 10, arenaWidth = 50, arenaDepth = 50) {
+        this.cellSize = cellSize;
+        this.arenaWidth = arenaWidth;
+        this.arenaDepth = arenaDepth;
+        this.halfWidth = arenaWidth / 2;
+        this.halfDepth = arenaDepth / 2;
+        this.cols = Math.ceil(arenaWidth / cellSize);
+        this.rows = Math.ceil(arenaDepth / cellSize);
+        this.cells = new Map(); // "col,row" -> Set of entities
+    }
+
+    // Convert world position to cell coordinates
+    _getCellCoords(x, z) {
+        const col = Math.floor((x + this.halfWidth) / this.cellSize);
+        const row = Math.floor((z + this.halfDepth) / this.cellSize);
+        return {
+            col: Math.max(0, Math.min(this.cols - 1, col)),
+            row: Math.max(0, Math.min(this.rows - 1, row))
+        };
+    }
+
+    _getCellKey(col, row) {
+        return `${col},${row}`;
+    }
+
+    // Clear all entities from the grid
+    clear() {
+        this.cells.clear();
+    }
+
+    // Add an entity to the grid
+    insert(entity, x, z) {
+        const { col, row } = this._getCellCoords(x, z);
+        const key = this._getCellKey(col, row);
+
+        if (!this.cells.has(key)) {
+            this.cells.set(key, new Set());
+        }
+        this.cells.get(key).add(entity);
+    }
+
+    // Get all entities in a cell
+    getEntitiesInCell(col, row) {
+        const key = this._getCellKey(col, row);
+        return this.cells.get(key) || new Set();
+    }
+
+    // Get all entities within a radius (checks neighboring cells)
+    getNearbyEntities(x, z, radius = 0) {
+        const { col, row } = this._getCellCoords(x, z);
+        const cellRadius = Math.ceil(radius / this.cellSize);
+        const nearby = [];
+
+        for (let dc = -cellRadius; dc <= cellRadius; dc++) {
+            for (let dr = -cellRadius; dr <= cellRadius; dr++) {
+                const c = col + dc;
+                const r = row + dr;
+                if (c >= 0 && c < this.cols && r >= 0 && r < this.rows) {
+                    const entities = this.getEntitiesInCell(c, r);
+                    for (const entity of entities) {
+                        nearby.push(entity);
+                    }
+                }
+            }
+        }
+
+        return nearby;
+    }
+
+    // Find the closest entity to a point
+    findClosest(x, z, maxRadius = 100) {
+        let closestEntity = null;
+        let closestDistSq = Infinity;
+
+        // Start with immediate cell, then expand outward
+        const { col, row } = this._getCellCoords(x, z);
+        const maxCellRadius = Math.ceil(maxRadius / this.cellSize);
+
+        for (let radius = 0; radius <= maxCellRadius; radius++) {
+            let foundInRing = false;
+
+            // Check cells at current radius ring
+            for (let dc = -radius; dc <= radius; dc++) {
+                for (let dr = -radius; dr <= radius; dr++) {
+                    // Only check cells on the ring perimeter (skip inner cells)
+                    if (radius > 0 && Math.abs(dc) < radius && Math.abs(dr) < radius) continue;
+
+                    const c = col + dc;
+                    const r = row + dr;
+                    if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) continue;
+
+                    const entities = this.getEntitiesInCell(c, r);
+                    for (const entity of entities) {
+                        if (!entity.position) continue;
+                        const dx = entity.position.x - x;
+                        const dz = entity.position.z - z;
+                        const distSq = dx * dx + dz * dz;
+                        if (distSq < closestDistSq) {
+                            closestDistSq = distSq;
+                            closestEntity = entity;
+                            foundInRing = true;
+                        }
+                    }
+                }
+            }
+
+            // If we found something and checked one more ring, we can stop
+            // (ensures we didn't miss a closer entity in an adjacent cell)
+            if (closestEntity && radius > 0) break;
+        }
+
+        return {
+            entity: closestEntity,
+            distance: closestEntity ? Math.sqrt(closestDistSq) : Infinity
+        };
+    }
+
+    // Rebuild grid from a collection of entities (call once per tick)
+    rebuild(entities) {
+        this.clear();
+        for (const entity of entities) {
+            if (entity.position && entity.isAlive !== false) {
+                this.insert(entity, entity.position.x, entity.position.z);
+            }
+        }
+    }
+}
+
+// Global player spatial grid (rebuilt each tick)
+const playerSpatialGrid = new SpatialGrid(10, 50, 50);
+
+// ==================== ENTITY CACHE ====================
+// Caches alive entity arrays to avoid repeated O(n) filtering per tick
+// Mark cache dirty when entities spawn/die, rebuild once per tick on first access
+const EntityCache = {
+    _alivePlayers: null,
+    _aliveZombies: null,
+    _playersDirty: true,
+    _zombiesDirty: true,
+    _lastRoomId: null,
+
+    // Mark caches as needing rebuild
+    invalidatePlayers() { this._playersDirty = true; },
+    invalidateZombies() { this._zombiesDirty = true; },
+    invalidateAll() { this._playersDirty = true; this._zombiesDirty = true; },
+
+    // Get cached alive players (rebuilds if dirty)
+    getAlivePlayers(room) {
+        if (!room) return [];
+        if (this._playersDirty || this._lastRoomId !== room.id) {
+            this._alivePlayers = Array.from(room.players.values()).filter(p => p.isAlive);
+            this._playersDirty = false;
+            this._lastRoomId = room.id;
+        }
+        return this._alivePlayers;
+    },
+
+    // Get cached alive zombies (rebuilds if dirty)
+    getAliveZombies(room) {
+        if (!room) return [];
+        if (this._zombiesDirty || this._lastRoomId !== room.id) {
+            this._aliveZombies = Array.from(room.zombies.values()).filter(z => z.isAlive);
+            this._zombiesDirty = false;
+            this._lastRoomId = room.id;
+        }
+        return this._aliveZombies;
+    },
+
+    // Call at start of each tick to reset for fresh rebuilds
+    beginTick() {
+        // Optionally force rebuild each tick for safety
+        // Comment these out if you want aggressive caching across tick phases
+        this._playersDirty = true;
+        this._zombiesDirty = true;
+    }
+};
+
 // ==================== SESSION AUTHENTICATION ====================
 // Game sessions - tracks active players and their server-verified stats
 const gameSessions = new Map();  // sessionToken -> { playerId, visitorId, score, kills, wave, startTime, isActive }
@@ -1247,7 +1428,9 @@ const CONFIG = {
         startZombies: 5,
         zombiesPerWave: 3,
         timeBetweenWaves: 5000,
-        maxZombiesAlive: 15,
+        baseMaxZombies: 20,        // Base max zombies alive
+        maxZombiesPerWave: 5,      // Additional zombies per wave
+        absoluteMaxZombies: 100,   // Hard cap for performance
         spawnInterval: 2000
     },
     zombie: {
@@ -1349,12 +1532,21 @@ function removePlayer(id) {
 }
 
 // ==================== ZOMBIE MANAGEMENT ====================
+
+// Calculate max zombies allowed based on current wave
+function getMaxZombiesForWave(wave) {
+    const scaled = CONFIG.waves.baseMaxZombies + (wave * CONFIG.waves.maxZombiesPerWave);
+    return Math.min(scaled, CONFIG.waves.absoluteMaxZombies);
+}
+
 function spawnZombie() {
     if (!GameState.isRunning) return;
 
+    const currentWave = GameState.wave || 1;
+    const maxZombies = getMaxZombiesForWave(currentWave);
     const aliveZombies = Array.from(GameState.zombies.values()).filter(z => z.isAlive);
-    if (aliveZombies.length >= CONFIG.waves.maxZombiesAlive) {
-        log('Max zombies alive, waiting...', 'WARN');
+    if (aliveZombies.length >= maxZombies) {
+        log(`Max zombies alive (${maxZombies} for wave ${currentWave}), waiting...`, 'WARN');
         return;
     }
 
@@ -1412,40 +1604,40 @@ function spawnZombie() {
     });
 }
 
-function updateZombies() {
-    if (!GameState.isRunning || GameState.players.size === 0) return;
+function updateZombies(room = null) {
+    // Use passed room or fall back to GameState proxy for legacy compatibility
+    const state = room || GameState;
+    if (!state.isRunning || state.players.size === 0) return;
 
     const now = Date.now();
     const delta = 1 / CONFIG.tickRate;
-    const players = Array.from(GameState.players.values()).filter(p => p.isAlive);
+
+    // Use cached alive players to avoid filtering every tick
+    const players = room ? EntityCache.getAlivePlayers(room) :
+        Array.from(state.players.values()).filter(p => p.isAlive);
 
     if (players.length === 0) return;
 
-    GameState.zombies.forEach((zombie, id) => {
+    // Rebuild spatial grid with alive players once per tick (O(m))
+    // This enables O(1) lookups per zombie instead of O(m)
+    playerSpatialGrid.rebuild(players);
+
+    state.zombies.forEach((zombie, id) => {
         if (!zombie.isAlive) return;
 
-        // Find closest player
-        let closestPlayer = null;
-        let closestDist = Infinity;
-
-        players.forEach(player => {
-            const dx = player.position.x - zombie.position.x;
-            const dz = player.position.z - zombie.position.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < closestDist) {
-                closestDist = dist;
-                closestPlayer = player;
-            }
-        });
+        // Find closest player using spatial grid (O(1) average case)
+        const { entity: closestPlayer, distance } = playerSpatialGrid.findClosest(
+            zombie.position.x,
+            zombie.position.z
+        );
 
         if (!closestPlayer) return;
 
         zombie.targetPlayerId = closestPlayer.id;
 
-        // Calculate direct distance to player
+        // Calculate direction to player
         const dx = closestPlayer.position.x - zombie.position.x;
         const dz = closestPlayer.position.z - zombie.position.z;
-        const distance = Math.sqrt(dx * dx + dz * dz);
 
         // Attack if close enough
         if (distance <= CONFIG.zombie.attackRange) {
@@ -2657,12 +2849,45 @@ const BinaryMsgType = {
     PLAYER_POS: 4
 };
 
+// ==================== INTEREST MANAGEMENT ====================
+// Distance-based filtering to reduce bandwidth for distant entities
+const INTEREST_CONFIG = {
+    zombieViewDistance: 40,     // Only send zombie updates within this distance
+    alwaysIncludeTargeting: true // Always include zombies targeting this player
+};
+
+// Filter zombies relevant to a specific player
+function getRelevantZombies(zombieMap, playerPosition, playerId) {
+    const relevant = [];
+    const viewDistSq = INTEREST_CONFIG.zombieViewDistance * INTEREST_CONFIG.zombieViewDistance;
+
+    zombieMap.forEach(zombie => {
+        if (!zombie.isAlive) return;
+
+        // Always include zombies targeting this player
+        if (INTEREST_CONFIG.alwaysIncludeTargeting && zombie.targetPlayerId === playerId) {
+            relevant.push(zombie);
+            return;
+        }
+
+        // Distance check
+        const dx = zombie.position.x - playerPosition.x;
+        const dz = zombie.position.z - playerPosition.z;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq <= viewDistSq) {
+            relevant.push(zombie);
+        }
+    });
+
+    return relevant;
+}
+
 // Binary encoder for high-frequency messages (~60% bandwidth reduction)
 const BinaryProtocol = {
-    // Encode sync message to binary
-    encodeSync(zombies, gameState) {
+    // Encode sync message to binary from zombie array (for interest management)
+    encodeSyncFromArray(zombieArray, gameState) {
         // Calculate buffer size: header(5) + gameState(16) + zombies(20 each)
-        const zombieArray = Array.from(zombies.values());
         const bufferSize = 5 + 16 + (zombieArray.length * 20);
         const buffer = Buffer.alloc(bufferSize);
         let offset = 0;
@@ -2698,6 +2923,11 @@ const BinaryProtocol = {
         });
 
         return buffer;
+    },
+
+    // Legacy: Encode sync message to binary (sends all zombies)
+    encodeSync(zombies, gameState) {
+        return this.encodeSyncFromArray(Array.from(zombies.values()), gameState);
     }
 };
 
@@ -2720,17 +2950,40 @@ setInterval(() => {
     // Process all active game rooms
     gameRooms.forEach((room, roomId) => {
         if (room.isRunning && !room.isPaused) {
-            // For legacy compatibility, set the current room for global functions
-            updateZombies();
+            // Reset entity cache for this tick
+            EntityCache.beginTick();
 
-            // Send binary sync for better performance
-            const binaryData = BinaryProtocol.encodeSync(GameState.zombies, {
+            // For legacy compatibility, set the current room for global functions
+            updateZombies(room);
+
+            // Game state shared by all players
+            const gameState = {
                 wave: room.wave,
                 zombiesRemaining: room.zombiesRemaining,
                 totalKills: room.totalKills,
                 totalScore: room.totalScore
+            };
+
+            // Send personalized sync to each player (interest management)
+            room.players.forEach((player, playerId) => {
+                if (!player.ws || player.ws.readyState !== WebSocket.OPEN) return;
+                if (!player.isAlive || !player.position) return;
+
+                // Filter zombies relevant to this player
+                const relevantZombies = getRelevantZombies(
+                    room.zombies,
+                    player.position,
+                    playerId
+                );
+
+                // Encode and send personalized update
+                const binaryData = BinaryProtocol.encodeSyncFromArray(relevantZombies, gameState);
+                try {
+                    player.ws.send(binaryData);
+                } catch (e) {
+                    log(`Binary WebSocket send error to ${playerId}: ${e.message}`, 'ERROR');
+                }
             });
-            broadcastBinaryToRoom(room, binaryData);
         }
     });
 }, 1000 / CONFIG.tickRate);
