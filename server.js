@@ -2453,6 +2453,14 @@ function isValidRotation(rot) {
            isValidNumber(rot.y, -Math.PI * 2, Math.PI * 2);
 }
 
+function isValidDirection(dir) {
+    if (!dir || typeof dir !== 'object') return false;
+    // Direction vectors should be normalized (length ~1), allow -2 to 2 range
+    return isValidNumber(dir.x, -2, 2) &&
+           isValidNumber(dir.y, -2, 2) &&
+           isValidNumber(dir.z, -2, 2);
+}
+
 function sanitizeString(str, maxLength = 50) {
     if (typeof str !== 'string') return '';
     return str.substring(0, maxLength).replace(/[<>]/g, '');
@@ -2507,6 +2515,7 @@ function handleMessage(playerId, message) {
         case 'shoot':
             // Validate shooting data
             if (!room.isRunning || !player.isAlive) break;
+            if (!isValidPosition(message.origin) || !isValidDirection(message.direction)) break;
 
             broadcastToRoom(room, {
                 type: 'playerShoot',
@@ -2517,7 +2526,8 @@ function handleMessage(playerId, message) {
 
             // Calculate damage server-side based on player's current weapon
             if (message.hitZombieId && typeof message.hitZombieId === 'string') {
-                const weaponConfig = CONFIG.weapons[player.currentWeapon];
+                const currentWeapon = player.currentWeapon || 'pistol';
+                const weaponConfig = CONFIG.weapons[currentWeapon];
                 if (weaponConfig) {
                     let damage = weaponConfig.damage;
                     const isHeadshot = !!message.isHeadshot;
