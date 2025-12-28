@@ -331,12 +331,17 @@ let httpsServer = null;
 let usingTrustedCerts = false;
 
 if (sslCerts) {
-    const sslOptions = {
-        key: fs.readFileSync(sslCerts.key),
-        cert: fs.readFileSync(sslCerts.cert)
-    };
-    httpsServer = https.createServer(sslOptions, app);
-    usingTrustedCerts = sslCerts.trusted;
+    try {
+        const sslOptions = {
+            key: fs.readFileSync(sslCerts.key),
+            cert: fs.readFileSync(sslCerts.cert)
+        };
+        httpsServer = https.createServer(sslOptions, app);
+        usingTrustedCerts = sslCerts.trusted;
+    } catch (e) {
+        log(`Failed to load SSL certificates: ${e.message}`, 'ERROR');
+        log('Continuing with HTTP only', 'WARN');
+    }
 }
 
 // Create WebSocket server (shared by both HTTP and HTTPS)
