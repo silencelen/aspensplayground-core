@@ -2093,6 +2093,14 @@ function damagePlayer(playerId, damage) {
                 damage: damage
             }));
         }
+
+        // Broadcast health update to all players (for nametag health bars)
+        broadcast({
+            type: 'playerHealthSync',
+            playerId: playerId,
+            health: player.health,
+            maxHealth: 100
+        });
     }
 }
 

@@ -3707,6 +3707,10 @@ function handleServerMessage(message) {
             handlePlayerDied(message.playerId);
             break;
 
+        case 'playerHealthSync':
+            handlePlayerHealthSync(message);
+            break;
+
         case 'zombieSpawned':
             handleZombieSpawned(message.zombie);
             break;
@@ -3977,8 +3981,17 @@ function handlePlayerJoined(playerData) {
     playerData.isMoving = false;
     playerData.shootAnimTime = 0;
 
+    // Initialize health tracking
+    playerData.health = playerData.health || 100;
+    playerData.maxHealth = playerData.maxHealth || 100;
+
     remotePlayers.set(playerData.id, playerData);
     createRemotePlayerMesh(playerData);
+
+    // Update nametag with initial health
+    const healthPercent = playerData.health / playerData.maxHealth;
+    updatePlayerNametag(playerData.id, healthPercent);
+
     updatePlayerList();
 }
 
@@ -4132,6 +4145,24 @@ function handlePlayerDied(playerId) {
         }
     }
     updateHUD();
+}
+
+// Handle health sync for remote players (updates nametag health bars)
+function handlePlayerHealthSync(message) {
+    if (!message.playerId || typeof message.health !== 'number') return;
+
+    // Skip if it's our own health (handled separately)
+    if (message.playerId === localPlayerId) return;
+
+    const playerData = remotePlayers.get(message.playerId);
+    if (playerData) {
+        playerData.health = message.health;
+        playerData.maxHealth = message.maxHealth || 100;
+
+        // Update nametag health bar
+        const healthPercent = playerData.health / playerData.maxHealth;
+        updatePlayerNametag(message.playerId, healthPercent);
+    }
 }
 
 function handleZombieSpawned(zombieData) {
@@ -4571,6 +4602,95 @@ function handleChat(message) {
 const PLAYER_EYE_HEIGHT = 1.65; // Eye level for first-person camera (realistic ~5'5" eye height)
 const PLAYER_TOTAL_HEIGHT = 1.8; // Total height including top of head
 
+// Draw nametag with health bar on canvas
+function drawNametag(ctx, name, color, healthPercent) {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Background with rounded corners
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.roundRect(8, 4, 240, 72, 10);
+    ctx.fill();
+
+    // Border with player color
+    const colorHex = '#' + color.toString(16).padStart(6, '0');
+    ctx.strokeStyle = colorHex;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Player name
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(name.substring(0, 12), 128, 26);
+    ctx.shadowBlur = 0;
+
+    // Health bar background
+    const barX = 24;
+    const barY = 48;
+    const barWidth = 208;
+    const barHeight = 16;
+
+    ctx.fillStyle = 'rgba(60, 60, 60, 0.9)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barWidth, barHeight, 4);
+    ctx.fill();
+
+    // Health bar fill
+    const fillWidth = Math.max(0, barWidth * healthPercent);
+    if (fillWidth > 0) {
+        // Color based on health: green -> yellow -> red
+        let barColor;
+        if (healthPercent > 0.6) {
+            barColor = '#00ff00';
+        } else if (healthPercent > 0.3) {
+            barColor = '#ffff00';
+        } else {
+            barColor = '#ff4444';
+        }
+
+        ctx.fillStyle = barColor;
+        ctx.beginPath();
+        ctx.roundRect(barX + 2, barY + 2, fillWidth - 4, barHeight - 4, 3);
+        ctx.fill();
+
+        // Glow effect
+        ctx.shadowColor = barColor;
+        ctx.shadowBlur = 6;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // Health percentage text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(healthPercent * 100) + '%', 128, barY + barHeight / 2 + 1);
+}
+
+// Update a remote player's nametag health bar
+function updatePlayerNametag(playerId, healthPercent) {
+    const mesh = remotePlayerMeshes.get(playerId);
+    if (!mesh || !mesh.userData.nametag) return;
+
+    const nametag = mesh.userData.nametag;
+    const userData = nametag.userData;
+
+    // Only update if health changed significantly
+    if (Math.abs(userData.currentHealth - healthPercent) < 0.01) return;
+
+    userData.currentHealth = healthPercent;
+    drawNametag(userData.ctx, userData.playerName, userData.playerColor, healthPercent);
+    userData.texture.needsUpdate = true;
+}
+
 function createRemotePlayerMesh(playerData) {
     const group = new THREE.Group();
 
@@ -4849,36 +4969,43 @@ function createRemotePlayerMesh(playerData) {
     weaponGroup.rotation.x = -0.2;
     group.add(weaponGroup);
 
-    // === NAME TAG ===
+    // === NAME TAG WITH HEALTH BAR ===
+    const nametagGroup = new THREE.Group();
+    nametagGroup.name = 'nametag';
+
+    // Create canvas for nametag
     const canvas = document.createElement('canvas');
     canvas.width = 256;
-    canvas.height = 64;
+    canvas.height = 80;
     const ctx = canvas.getContext('2d');
 
-    // Rounded background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.beginPath();
-    ctx.roundRect(8, 8, 240, 48, 8);
-    ctx.fill();
-
-    // Border
-    ctx.strokeStyle = '#' + primaryColor.toString(16).padStart(6, '0');
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Text
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(playerData.name, 128, 32);
+    // Draw nametag (will be updated dynamically)
+    drawNametag(ctx, playerData.name, primaryColor, 1.0);
 
     const nameTexture = new THREE.CanvasTexture(canvas);
-    const nameMat = new THREE.SpriteMaterial({ map: nameTexture, transparent: true });
+    nameTexture.needsUpdate = true;
+    const nameMat = new THREE.SpriteMaterial({
+        map: nameTexture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false
+    });
     const nameSprite = new THREE.Sprite(nameMat);
+    nameSprite.renderOrder = 998;
     nameSprite.position.y = PLAYER_TOTAL_HEIGHT + 0.5;
-    nameSprite.scale.set(1.8, 0.45, 1);
-    group.add(nameSprite);
+    nameSprite.scale.set(1.8, 0.56, 1);
+    nametagGroup.add(nameSprite);
+
+    // Store references for dynamic updates
+    nametagGroup.userData.canvas = canvas;
+    nametagGroup.userData.ctx = ctx;
+    nametagGroup.userData.texture = nameTexture;
+    nametagGroup.userData.playerName = playerData.name;
+    nametagGroup.userData.playerColor = primaryColor;
+    nametagGroup.userData.currentHealth = 1.0;
+
+    group.add(nametagGroup);
+    group.userData.nametag = nametagGroup;
 
     // Position the entire model (no scaling - built at correct proportions)
     group.position.set(playerData.position.x, 0, playerData.position.z);
