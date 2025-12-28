@@ -464,6 +464,13 @@
             margin-bottom: 30px;
         }
 
+        .pause-hint {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #888;
+            font-family: 'Orbitron', sans-serif;
+        }
+
         /* Boss Health Bar */
         #boss-health-container {
             position: fixed;
@@ -2413,7 +2420,9 @@
     <div id="pause-screen" role="dialog" aria-labelledby="pause-title" aria-modal="true">
         <h2 class="menu-title" id="pause-title">PAUSED</h2>
         <button class="menu-button" id="resume-button" aria-label="Resume game">RESUME</button>
-        <button class="menu-button" id="quit-button" aria-label="Quit to main menu">QUIT TO MENU</button>
+        <button class="menu-button secondary" id="pause-settings-button" aria-label="Open settings">SETTINGS</button>
+        <button class="menu-button secondary" id="quit-button" style="background: linear-gradient(180deg, #662222, #441111); border-color: #883333;" aria-label="Quit to main menu">QUIT TO MENU</button>
+        <p class="pause-hint">Press ESC to resume</p>
     </div>
 
     <div id="debug-log"></div>

@@ -2403,6 +2403,12 @@ function initSettingsMenu() {
     document.getElementById('settings-close')?.addEventListener('click', () => {
         setElementDisplay('settings-screen', 'none');
         saveSettings();
+
+        // Return to pause screen if we came from there
+        if (window._settingsFromPause && GameState.isPaused) {
+            setElementDisplay('pause-screen', 'flex');
+            window._settingsFromPause = false;
+        }
     });
 
     // Reset to defaults
@@ -13368,6 +13374,16 @@ function initEventListeners() {
 
     document.getElementById('quit-button').addEventListener('click', () => {
         quitToMenu();
+    });
+
+    // Settings button in pause menu
+    document.getElementById('pause-settings-button')?.addEventListener('click', () => {
+        // Hide pause screen, show settings
+        setElementDisplay('pause-screen', 'none');
+        setElementDisplay('settings-screen', 'flex');
+        updateSettingsUI();
+        // Track that we came from pause menu
+        window._settingsFromPause = true;
     });
 
     // Leaderboard toggle on main menu
