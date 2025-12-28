@@ -3704,7 +3704,9 @@ function handleServerMessage(message) {
             break;
 
         case 'waveStart':
-            handleWaveStart(message);
+            handleWaveStart(message).catch(err => {
+                DebugLog.log('Error in handleWaveStart: ' + err.message, 'error');
+            });
             break;
 
         case 'waveComplete':
