@@ -110,7 +110,8 @@
 
         #game-container {
             width: 100vw;
-            height: 100vh;
+            height: 100vh; /* Fallback for older browsers */
+            height: 100dvh; /* Dynamic viewport height - accounts for address bar */
             position: relative;
         }
 
@@ -2931,7 +2932,8 @@
             /* Cosmetics screen mobile */
             .cosmetics-container {
                 padding: 15px;
-                max-height: 100vh;
+                max-height: 100vh; /* Fallback for older browsers */
+                max-height: 100dvh; /* Dynamic viewport height */
                 overflow-y: auto;
             }
 
