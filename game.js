@@ -1537,7 +1537,7 @@ function switchWeapon(weaponName) {
     weapon.isFiring = false;
 
     // Notify server of weapon switch (for server-side damage calculation)
-    sendMessage({ type: 'weaponSwitch', weapon: weaponName });
+    sendToServer({ type: 'weaponSwitch', weapon: weaponName });
 
     // Update weapon model
     updateWeaponModel();
