@@ -1333,9 +1333,15 @@ function removePlayer(id) {
         }
 
         // Check if room should be cleaned up or game stopped
+        // Use try-finally to ensure cleanup happens even if stopGameInRoom fails
         if (room.players.size === 0) {
-            stopGameInRoom(room);
-            cleanupEmptyRooms();
+            try {
+                stopGameInRoom(room);
+            } catch (e) {
+                log(`Error stopping game in room ${room.id}: ${e.message}`, 'ERROR');
+            } finally {
+                cleanupEmptyRooms();
+            }
         }
     }
 }
@@ -2070,9 +2076,11 @@ function broadcast(message, excludeId = null) {
 
 // Room-specific broadcast
 function broadcastToRoom(room, message, excludeId = null) {
-    if (!room) return;
+    if (!room || !room.players) return;
     const data = JSON.stringify(message);
-    room.players.forEach((player, id) => {
+    // Create a snapshot of players to avoid race conditions during iteration
+    const playerSnapshot = Array.from(room.players.entries());
+    playerSnapshot.forEach(([id, player]) => {
         if (id !== excludeId && player.ws && player.ws.readyState === WebSocket.OPEN) {
             try {
                 player.ws.send(data);

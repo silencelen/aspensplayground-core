@@ -3216,6 +3216,7 @@ function updateParticles(delta) {
 
 // ==================== MULTIPLAYER CONNECTION ====================
 let reconnectAttempts = 0;
+let isReconnecting = false;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_BASE = 2000;
 
@@ -3290,12 +3291,15 @@ function connectToServer() {
         document.getElementById('ready-button').disabled = true;
 
         // Only reconnect if we're still in multiplayer mode and in lobby
-        if (GameState.mode === 'multiplayer' && GameState.isInLobby) {
+        // Use isReconnecting flag to prevent multiple parallel reconnect attempts
+        if (GameState.mode === 'multiplayer' && GameState.isInLobby && !isReconnecting) {
+            isReconnecting = true;
             reconnectAttempts++;
             const delay = RECONNECT_DELAY_BASE * Math.pow(1.5, reconnectAttempts - 1);
             document.getElementById('lobby-status').textContent = `Reconnecting... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`;
 
             setTimeout(() => {
+                isReconnecting = false;
                 if (GameState.mode === 'multiplayer' && !GameState.isConnected) {
                     connectToServer();
                 }
