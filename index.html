@@ -431,6 +431,132 @@
             text-shadow: 0 0 10px #ff6600;
         }
 
+        /* Age Gate Modal */
+        #age-gate {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+        }
+
+        #age-gate.hidden {
+            display: none;
+        }
+
+        .age-gate-container {
+            background: linear-gradient(135deg, #1a0a0a, #2d1515);
+            border: 3px solid #ff0000;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.3);
+        }
+
+        .age-gate-title {
+            font-family: 'Creepster', cursive;
+            font-size: 36px;
+            color: #ff0000;
+            text-shadow: 0 0 20px #ff0000;
+            margin-bottom: 20px;
+        }
+
+        .age-gate-warning {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid #ff4444;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+
+        .age-gate-warning-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .age-gate-warning-text {
+            color: #ff6666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .age-gate-question {
+            color: #ffffff;
+            font-size: 20px;
+            margin-bottom: 25px;
+        }
+
+        .age-gate-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .age-gate-btn {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            border: 2px solid;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .age-gate-btn-yes {
+            background: linear-gradient(135deg, #1a4a1a, #2a6a2a);
+            border-color: #00ff00;
+            color: #00ff00;
+        }
+
+        .age-gate-btn-yes:hover {
+            background: linear-gradient(135deg, #2a6a2a, #3a8a3a);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        }
+
+        .age-gate-btn-no {
+            background: linear-gradient(135deg, #4a1a1a, #6a2a2a);
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+
+        .age-gate-btn-no:hover {
+            background: linear-gradient(135deg, #6a2a2a, #8a3a3a);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        }
+
+        .age-gate-legal {
+            color: #666;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .age-gate-legal a {
+            color: #888;
+        }
+
+        .age-gate-denied {
+            display: none;
+        }
+
+        .age-gate-denied.show {
+            display: block;
+        }
+
+        .age-gate-denied-text {
+            color: #ff4444;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
         #start-screen, #game-over-screen, #pause-screen, #lobby-screen {
             position: fixed;
             top: 0;
@@ -2053,6 +2179,43 @@
     </style>
 </head>
 <body>
+    <!-- Age Gate Modal -->
+    <div id="age-gate" class="hidden" role="dialog" aria-labelledby="age-gate-title" aria-modal="true">
+        <div class="age-gate-container">
+            <div class="age-gate-title" id="age-gate-title">AGE VERIFICATION</div>
+
+            <div class="age-gate-warning">
+                <div class="age-gate-warning-icon">&#x26A0;&#xFE0F;</div>
+                <div class="age-gate-warning-text">
+                    <strong>CONTENT WARNING</strong><br>
+                    This game contains violence, blood effects, and scary themes including zombies and undead creatures.
+                </div>
+            </div>
+
+            <div id="age-gate-prompt">
+                <div class="age-gate-question">Are you 13 years of age or older?</div>
+
+                <div class="age-gate-buttons">
+                    <button class="age-gate-btn age-gate-btn-yes" id="age-gate-yes" aria-label="Yes, I am 13 or older">YES</button>
+                    <button class="age-gate-btn age-gate-btn-no" id="age-gate-no" aria-label="No, I am under 13">NO</button>
+                </div>
+
+                <div class="age-gate-legal">
+                    By clicking "YES", you confirm you are 13+ and agree to our<br>
+                    <a href="/privacy.html" target="_blank">Privacy Policy</a> and <a href="/terms.html" target="_blank">Terms of Service</a>
+                </div>
+            </div>
+
+            <div id="age-gate-denied" class="age-gate-denied">
+                <div class="age-gate-denied-text">
+                    Sorry, this game is not suitable for players under 13 years of age.<br><br>
+                    Please ask a parent or guardian for permission before playing games with violent content.
+                </div>
+                <a href="https://www.google.com" class="age-gate-btn age-gate-btn-no">Leave Site</a>
+            </div>
+        </div>
+    </div>
+
     <!-- Rotate Device Overlay (shown on mobile portrait) -->
     <div id="rotate-device-overlay">
         <div class="rotate-icon">&#x1F4F1;</div>

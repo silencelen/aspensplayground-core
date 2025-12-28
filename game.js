@@ -13682,8 +13682,72 @@ function leaveLobby() {
     btn.disabled = true;
 }
 
+// ==================== AGE GATE ====================
+const AgeGate = {
+    STORAGE_KEY: 'ageVerified',
+
+    // Check if user has already verified age
+    isVerified() {
+        return localStorage.getItem(this.STORAGE_KEY) === 'true';
+    },
+
+    // Show the age gate modal
+    show() {
+        const ageGate = document.getElementById('age-gate');
+        if (ageGate) {
+            ageGate.classList.remove('hidden');
+        }
+    },
+
+    // Hide the age gate modal
+    hide() {
+        const ageGate = document.getElementById('age-gate');
+        if (ageGate) {
+            ageGate.classList.add('hidden');
+        }
+    },
+
+    // Handle "Yes" button click - user is 13+
+    confirm() {
+        localStorage.setItem(this.STORAGE_KEY, 'true');
+        this.hide();
+        DebugLog.log('Age verification confirmed', 'info');
+    },
+
+    // Handle "No" button click - user is under 13
+    deny() {
+        const prompt = document.getElementById('age-gate-prompt');
+        const denied = document.getElementById('age-gate-denied');
+        if (prompt) prompt.style.display = 'none';
+        if (denied) denied.classList.add('show');
+        DebugLog.log('Age verification denied - user under 13', 'warn');
+    },
+
+    // Initialize age gate event listeners
+    init() {
+        const yesBtn = document.getElementById('age-gate-yes');
+        const noBtn = document.getElementById('age-gate-no');
+
+        if (yesBtn) {
+            yesBtn.addEventListener('click', () => this.confirm());
+        }
+        if (noBtn) {
+            noBtn.addEventListener('click', () => this.deny());
+        }
+
+        // Check if verification is needed
+        if (!this.isVerified()) {
+            this.show();
+        }
+    }
+};
+
 // ==================== INITIALIZE ====================
 window.addEventListener('load', () => {
     DebugLog.log('Window loaded, starting initialization...', 'info');
+
+    // Initialize age gate first
+    AgeGate.init();
+
     init();
 });
