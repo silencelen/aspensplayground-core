@@ -8,6 +8,8 @@ const ASSETS_TO_CACHE = [
     '/index.html',
     '/game.js',
     '/manifest.json',
+    '/privacy.html',
+    '/terms.html',
     '/modules/config.js',
     '/modules/ui.js',
     '/modules/maps/MapManager.js',

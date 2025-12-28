@@ -729,6 +729,28 @@
             border-radius: 4px;
         }
 
+        .legal-footer {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+        }
+
+        .legal-footer a {
+            color: #888;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .legal-footer a:hover {
+            color: #ff6600;
+            text-decoration: underline;
+        }
+
         .controls-header {
             color: #ff6600;
             font-size: 18px;
@@ -2254,6 +2276,10 @@
             <div><span>E</span> - Pick Up Items</div>
             <div><span>R</span> - Reload</div>
             <div><span>ESC</span> - Pause</div>
+        </div>
+        <div class="legal-footer">
+            <a href="/privacy.html" target="_blank">Privacy Policy</a>
+            <a href="/terms.html" target="_blank">Terms of Service</a>
         </div>
     </div>
 
