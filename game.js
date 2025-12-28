@@ -94,7 +94,103 @@ const ProceduralMap = {
     }
 };
 
-// ==================== USER SETTINGS ====================
+// ==================== AUTO-QUALITY DETECTION ====================
+function detectOptimalQuality() {
+    let score = 0;
+    const factors = [];
+
+    // Check device memory (in GB)
+    const memory = navigator.deviceMemory || 4; // Default to 4GB if not available
+    if (memory >= 8) {
+        score += 3;
+        factors.push('High memory: ' + memory + 'GB');
+    } else if (memory >= 4) {
+        score += 2;
+        factors.push('Medium memory: ' + memory + 'GB');
+    } else {
+        score += 1;
+        factors.push('Low memory: ' + memory + 'GB');
+    }
+
+    // Check CPU cores
+    const cores = navigator.hardwareConcurrency || 4;
+    if (cores >= 8) {
+        score += 3;
+        factors.push('High CPU cores: ' + cores);
+    } else if (cores >= 4) {
+        score += 2;
+        factors.push('Medium CPU cores: ' + cores);
+    } else {
+        score += 1;
+        factors.push('Low CPU cores: ' + cores);
+    }
+
+    // Check screen resolution (higher = more GPU work needed)
+    const pixels = window.screen.width * window.screen.height * (window.devicePixelRatio || 1);
+    if (pixels > 4000000) { // > 4MP (e.g., 4K displays)
+        score -= 1; // Penalize high-res displays
+        factors.push('High resolution display');
+    }
+
+    // Check GPU via WebGL
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                const gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase();
+
+                // Check for integrated/low-end GPUs
+                const lowEndGPUs = ['intel', 'mesa', 'swiftshader', 'llvmpipe', 'mali-4', 'adreno 3', 'adreno 4', 'powervr'];
+                const midRangeGPUs = ['mali-g', 'adreno 5', 'adreno 6', 'geforce mx', 'radeon vega', 'intel iris'];
+                const highEndGPUs = ['geforce rtx', 'geforce gtx', 'radeon rx', 'apple m1', 'apple m2', 'apple m3'];
+
+                if (highEndGPUs.some(gpu => gpuRenderer.includes(gpu))) {
+                    score += 3;
+                    factors.push('High-end GPU detected');
+                } else if (midRangeGPUs.some(gpu => gpuRenderer.includes(gpu))) {
+                    score += 2;
+                    factors.push('Mid-range GPU detected');
+                } else if (lowEndGPUs.some(gpu => gpuRenderer.includes(gpu))) {
+                    score += 1;
+                    factors.push('Low-end GPU detected');
+                } else {
+                    score += 2; // Unknown GPU, assume mid-range
+                    factors.push('Unknown GPU: ' + gpuRenderer.substring(0, 30));
+                }
+            } else {
+                score += 2; // Can't detect GPU, assume mid-range
+            }
+        }
+    } catch (e) {
+        score += 2; // WebGL check failed, assume mid-range
+    }
+
+    // Mobile devices get penalized (thermal throttling, battery concerns)
+    if (isMobile) {
+        score -= 2;
+        factors.push('Mobile device detected');
+    }
+
+    // Determine quality level based on score
+    // Score range: 1-9 (3 categories * 1-3 points each, minus penalties)
+    let quality;
+    if (score >= 7) {
+        quality = 'high';
+    } else if (score >= 4) {
+        quality = 'medium';
+    } else {
+        quality = 'low';
+    }
+
+    DebugLog.log('Auto-detected quality: ' + quality + ' (score: ' + score + ')', 'info');
+    factors.forEach(f => DebugLog.log('  - ' + f, 'info'));
+
+    return quality;
+}
+
+// ==================== USER SETTINGS ==
 const DEFAULT_SETTINGS = {
     mouseSensitivity: 1.0,    // Multiplier (0.25 - 2.0)
     masterVolume: 0.7,        // 0 - 1
@@ -115,6 +211,13 @@ function loadSettings() {
             const parsed = JSON.parse(saved);
             userSettings = { ...DEFAULT_SETTINGS, ...parsed };
             DebugLog.log('Settings loaded from localStorage', 'info');
+        } else {
+            // First time user - auto-detect optimal quality
+            userSettings = { ...DEFAULT_SETTINGS };
+            userSettings.graphicsQuality = detectOptimalQuality();
+            // Save the auto-detected settings
+            saveSettings();
+            DebugLog.log('First run: auto-detected graphics quality', 'info');
         }
     } catch (e) {
         DebugLog.log('Failed to load settings, using defaults', 'warn');
