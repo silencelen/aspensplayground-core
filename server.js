@@ -36,32 +36,105 @@ const clientMessageRates = new Map(); // playerId -> { count, windowStart }
 
 const app = express();
 
-// SSL Certificate paths
-const SSL_KEY_PATH = path.join(__dirname, 'ssl', 'key.pem');
-const SSL_CERT_PATH = path.join(__dirname, 'ssl', 'cert.pem');
+// ==================== SSL CERTIFICATE CONFIGURATION ====================
+const DOMAIN = process.env.DOMAIN || 'aspensplayground.com';
 
-// Check if SSL certificates exist, generate if not
-function ensureSSLCerts() {
-    const sslDir = path.join(__dirname, 'ssl');
-    if (!fs.existsSync(sslDir)) {
-        fs.mkdirSync(sslDir);
+// Certificate paths - priority order:
+// 1. Environment variables (SSL_KEY_PATH, SSL_CERT_PATH)
+// 2. Let's Encrypt standard paths
+// 3. Local ssl/ directory (self-signed fallback)
+
+const LETSENCRYPT_PATHS = {
+    // Linux standard paths
+    linux: {
+        key: `/etc/letsencrypt/live/${DOMAIN}/privkey.pem`,
+        cert: `/etc/letsencrypt/live/${DOMAIN}/fullchain.pem`
+    },
+    // Windows paths (if using win-acme or certbot for Windows)
+    win32: {
+        key: `C:\\Certbot\\live\\${DOMAIN}\\privkey.pem`,
+        cert: `C:\\Certbot\\live\\${DOMAIN}\\fullchain.pem`
     }
+};
 
-    if (!fs.existsSync(SSL_KEY_PATH) || !fs.existsSync(SSL_CERT_PATH)) {
-        console.log('Generating self-signed SSL certificates...');
-        try {
-            // Generate self-signed certificate using openssl
-            execSync(`openssl req -x509 -newkey rsa:2048 -keyout "${SSL_KEY_PATH}" -out "${SSL_CERT_PATH}" -days 365 -nodes -subj "/CN=localhost"`, {
-                stdio: 'pipe'
-            });
-            console.log('SSL certificates generated successfully!');
-        } catch (e) {
-            console.error('Failed to generate SSL certificates. Make sure openssl is installed.');
-            console.error('Falling back to HTTP...');
-            return false;
+const LOCAL_SSL_DIR = path.join(__dirname, 'ssl');
+const LOCAL_KEY_PATH = path.join(LOCAL_SSL_DIR, 'key.pem');
+const LOCAL_CERT_PATH = path.join(LOCAL_SSL_DIR, 'cert.pem');
+
+function findSSLCerts() {
+    // Priority 1: Environment variables
+    if (process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) {
+        if (fs.existsSync(process.env.SSL_KEY_PATH) && fs.existsSync(process.env.SSL_CERT_PATH)) {
+            console.log('Using SSL certificates from environment variables');
+            return {
+                key: process.env.SSL_KEY_PATH,
+                cert: process.env.SSL_CERT_PATH,
+                trusted: true
+            };
         }
     }
-    return true;
+
+    // Priority 2: Let's Encrypt certificates
+    const platform = process.platform;
+    const lePaths = LETSENCRYPT_PATHS[platform] || LETSENCRYPT_PATHS.linux;
+
+    if (fs.existsSync(lePaths.key) && fs.existsSync(lePaths.cert)) {
+        console.log(`Using Let's Encrypt certificates for ${DOMAIN}`);
+        return {
+            key: lePaths.key,
+            cert: lePaths.cert,
+            trusted: true
+        };
+    }
+
+    // Priority 3: Local self-signed certificates
+    return null;
+}
+
+function ensureSSLCerts() {
+    // First, try to find trusted certificates
+    const trustedCerts = findSSLCerts();
+    if (trustedCerts) {
+        return trustedCerts;
+    }
+
+    // Fall back to self-signed certificates
+    console.log('\n' + '='.repeat(60));
+    console.log('WARNING: No trusted SSL certificates found!');
+    console.log('Using self-signed certificates (NOT suitable for production)');
+    console.log('');
+    console.log('To get trusted certificates, run:');
+    console.log(`  certbot certonly --standalone -d ${DOMAIN}`);
+    console.log('');
+    console.log('Or set environment variables:');
+    console.log('  SSL_KEY_PATH=/path/to/privkey.pem');
+    console.log('  SSL_CERT_PATH=/path/to/fullchain.pem');
+    console.log('='.repeat(60) + '\n');
+
+    // Generate self-signed if needed
+    if (!fs.existsSync(LOCAL_SSL_DIR)) {
+        fs.mkdirSync(LOCAL_SSL_DIR);
+    }
+
+    if (!fs.existsSync(LOCAL_KEY_PATH) || !fs.existsSync(LOCAL_CERT_PATH)) {
+        console.log('Generating self-signed SSL certificates...');
+        try {
+            execSync(`openssl req -x509 -newkey rsa:2048 -keyout "${LOCAL_KEY_PATH}" -out "${LOCAL_CERT_PATH}" -days 365 -nodes -subj "/CN=${DOMAIN}"`, {
+                stdio: 'pipe'
+            });
+            console.log('Self-signed certificates generated successfully!');
+        } catch (e) {
+            console.error('Failed to generate SSL certificates. Make sure openssl is installed.');
+            console.error('Falling back to HTTP only...');
+            return null;
+        }
+    }
+
+    return {
+        key: LOCAL_KEY_PATH,
+        cert: LOCAL_CERT_PATH,
+        trusted: false
+    };
 }
 
 // Single port for both HTTP and HTTPS (protocol auto-detection)
@@ -71,15 +144,17 @@ const PORT = process.env.PORT || 3000;
 const httpServer = http.createServer(app);
 
 // Try to create HTTPS server
-const useSSL = ensureSSLCerts();
+const sslCerts = ensureSSLCerts();
 let httpsServer = null;
+let usingTrustedCerts = false;
 
-if (useSSL) {
+if (sslCerts) {
     const sslOptions = {
-        key: fs.readFileSync(SSL_KEY_PATH),
-        cert: fs.readFileSync(SSL_CERT_PATH)
+        key: fs.readFileSync(sslCerts.key),
+        cert: fs.readFileSync(sslCerts.cert)
     };
     httpsServer = https.createServer(sslOptions, app);
+    usingTrustedCerts = sslCerts.trusted;
 }
 
 // Create WebSocket server (shared by both HTTP and HTTPS)
@@ -2364,15 +2439,24 @@ mainServer.listen(PORT, '0.0.0.0', () => {
     log(`ASPEN'S PLAYGROUND - Multiplayer Server`, 'SUCCESS');
     log(`========================================`, 'SUCCESS');
     log(`Server running on port ${PORT}`, 'SUCCESS');
-    log(`Accepts both HTTP and HTTPS on the same port!`, 'SUCCESS');
+    log(`Domain: ${DOMAIN}`, 'INFO');
     log(``, 'INFO');
-    log(`Local:   http://localhost:${PORT}`, 'INFO');
-    log(`         https://localhost:${PORT}`, 'INFO');
-    log(`Network: http://0.0.0.0:${PORT}`, 'INFO');
-    log(`         https://0.0.0.0:${PORT}`, 'INFO');
-    if (useSSL) {
+    if (sslCerts) {
+        if (usingTrustedCerts) {
+            log(`SSL: Using TRUSTED certificates (Let's Encrypt)`, 'SUCCESS');
+            log(``, 'INFO');
+            log(`Public:  https://${DOMAIN}`, 'SUCCESS');
+        } else {
+            log(`SSL: Using SELF-SIGNED certificates (development only)`, 'WARN');
+            log(``, 'INFO');
+            log(`Local:   https://localhost:${PORT}`, 'INFO');
+            log(`         (Accept the certificate warning in browser)`, 'WARN');
+        }
+    } else {
+        log(`SSL: Disabled (HTTP only)`, 'WARN');
         log(``, 'INFO');
-        log(`Note: Accept the self-signed certificate warning for HTTPS`, 'WARN');
+        log(`Local:   http://localhost:${PORT}`, 'INFO');
     }
+    log(``, 'INFO');
     log(`Waiting for players to connect...`, 'INFO');
 });
