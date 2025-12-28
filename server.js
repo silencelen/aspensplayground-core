@@ -5,6 +5,7 @@
 const express = require('express');
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -41,23 +42,64 @@ function ensureSSLCerts() {
     return true;
 }
 
-// Try to use HTTPS, fall back to HTTP if SSL not available
+// Single port for both HTTP and HTTPS (protocol auto-detection)
+const PORT = process.env.PORT || 3000;
+
+// Create internal HTTP server (not exposed directly)
+const httpServer = http.createServer(app);
+
+// Try to create HTTPS server
 const useSSL = ensureSSLCerts();
-let server;
+let httpsServer = null;
 
 if (useSSL) {
     const sslOptions = {
         key: fs.readFileSync(SSL_KEY_PATH),
         cert: fs.readFileSync(SSL_CERT_PATH)
     };
-    server = https.createServer(sslOptions, app);
-} else {
-    server = http.createServer(app);
+    httpsServer = https.createServer(sslOptions, app);
 }
 
-const wss = new WebSocket.Server({ server });
+// Create WebSocket server (shared by both HTTP and HTTPS)
+const wss = new WebSocket.Server({ noServer: true });
 
-const PORT = process.env.PORT || 3000;
+// Handle WebSocket upgrades for both servers
+function handleUpgrade(request, socket, head) {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+    });
+}
+
+httpServer.on('upgrade', handleUpgrade);
+if (httpsServer) {
+    httpsServer.on('upgrade', handleUpgrade);
+}
+
+// Protocol detection server - routes to HTTP or HTTPS based on first byte
+const mainServer = net.createServer((socket) => {
+    socket.once('readable', () => {
+        // Peek at the first byte without consuming it
+        let chunk = socket.read(1);
+        if (!chunk) return;
+
+        // Put the byte back
+        socket.unshift(chunk);
+
+        // Determine protocol: TLS handshake starts with 0x16 or 0x80 (SSLv2)
+        const firstByte = chunk[0];
+        const isTLS = firstByte === 0x16 || firstByte === 0x80;
+
+        // Choose the appropriate server and emit the connection
+        if (isTLS && httpsServer) {
+            httpsServer.emit('connection', socket);
+        } else {
+            httpServer.emit('connection', socket);
+        }
+    });
+
+    socket.on('error', () => {});
+});
+
 const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard.json');
 const MAX_LEADERBOARD_SIZE = 10;
 
@@ -1479,16 +1521,20 @@ setInterval(() => {
 }, 1000 / CONFIG.tickRate);
 
 // ==================== START SERVER ====================
-server.listen(PORT, '0.0.0.0', () => {
-    const protocol = useSSL ? 'https' : 'http';
+mainServer.listen(PORT, '0.0.0.0', () => {
     log(`========================================`, 'SUCCESS');
     log(`ASPEN'S PLAYGROUND - Multiplayer Server`, 'SUCCESS');
     log(`========================================`, 'SUCCESS');
-    log(`Server running on port ${PORT} (${useSSL ? 'HTTPS' : 'HTTP'})`, 'SUCCESS');
-    log(`Local: ${protocol}://localhost:${PORT}`, 'INFO');
-    log(`Network: ${protocol}://0.0.0.0:${PORT}`, 'INFO');
+    log(`Server running on port ${PORT}`, 'SUCCESS');
+    log(`Accepts both HTTP and HTTPS on the same port!`, 'SUCCESS');
+    log(``, 'INFO');
+    log(`Local:   http://localhost:${PORT}`, 'INFO');
+    log(`         https://localhost:${PORT}`, 'INFO');
+    log(`Network: http://0.0.0.0:${PORT}`, 'INFO');
+    log(`         https://0.0.0.0:${PORT}`, 'INFO');
     if (useSSL) {
-        log(`Note: Accept the self-signed certificate warning in your browser`, 'WARN');
+        log(``, 'INFO');
+        log(`Note: Accept the self-signed certificate warning for HTTPS`, 'WARN');
     }
     log(`Waiting for players to connect...`, 'INFO');
 });
