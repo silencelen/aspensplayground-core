@@ -7837,9 +7837,9 @@ function initMobileControls() {
                 break;
             }
         }
-    });
+    }, { passive: true });
 
-    joystickBase.addEventListener('touchcancel', resetJoystick);
+    joystickBase.addEventListener('touchcancel', resetJoystick, { passive: true });
 
     // Sprint button (toggle)
     sprintBtn.addEventListener('touchstart', (e) => {
@@ -7891,7 +7891,7 @@ function initMobileControls() {
                 break;
             }
         }
-    });
+    }, { passive: true });
 
     // Shoot button - supports automatic weapons and camera panning while firing
     let shootInterval = null;
@@ -7962,7 +7962,7 @@ function initMobileControls() {
                 break;
             }
         }
-    });
+    }, { passive: true });
 
     shootBtn.addEventListener('touchcancel', () => {
         mobileInput.shooting = false;
@@ -7972,7 +7972,7 @@ function initMobileControls() {
             clearInterval(shootInterval);
             shootInterval = null;
         }
-    });
+    }, { passive: true });
 
     // Reload button
     reloadBtn.addEventListener('touchstart', (e) => {
