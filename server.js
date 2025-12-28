@@ -11,6 +11,27 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const rateLimit = require('express-rate-limit');
+
+// ==================== RATE LIMITING CONFIG ====================
+const RATE_LIMIT = {
+    // HTTP API limits
+    api: {
+        windowMs: 60 * 1000,      // 1 minute window
+        maxRequests: 30           // 30 requests per minute per IP
+    },
+    // WebSocket limits
+    ws: {
+        maxConnectionsPerIP: 5,   // Max 5 simultaneous connections per IP
+        maxMessagesPerSecond: 60, // Max 60 messages per second per client
+        banDurationMs: 5 * 60 * 1000  // 5 minute ban for abusive IPs
+    }
+};
+
+// Track connections and bans per IP
+const ipConnections = new Map();  // IP -> Set of WebSocket connections
+const ipBans = new Map();         // IP -> ban expiry timestamp
+const clientMessageRates = new Map(); // playerId -> { count, windowStart }
 
 const app = express();
 
@@ -65,6 +86,24 @@ const wss = new WebSocket.Server({ noServer: true });
 
 // Handle WebSocket upgrades for both servers
 function handleUpgrade(request, socket, head) {
+    const ip = getClientIP(request);
+
+    // Check if IP is banned
+    if (isIPBanned(ip)) {
+        log(`Rejected connection from banned IP: ${ip}`, 'WARN');
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+    }
+
+    // Check connection limit per IP
+    if (getIPConnectionCount(ip) >= RATE_LIMIT.ws.maxConnectionsPerIP) {
+        log(`Rejected connection from IP ${ip}: too many connections (${getIPConnectionCount(ip)})`, 'WARN');
+        socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+        socket.destroy();
+        return;
+    }
+
     wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
     });
@@ -106,6 +145,107 @@ const MAX_LEADERBOARD_SIZE = 10;
 // Serve static files and parse JSON
 app.use(express.static(path.join(__dirname)));
 app.use(express.json());
+
+// ==================== API RATE LIMITING ====================
+const apiLimiter = rateLimit({
+    windowMs: RATE_LIMIT.api.windowMs,
+    max: RATE_LIMIT.api.maxRequests,
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        log(`Rate limit exceeded for IP: ${req.ip}`, 'WARN');
+        res.status(429).json({ error: 'Too many requests, please try again later.' });
+    }
+});
+
+// Apply rate limiting to API endpoints
+app.use('/api/', apiLimiter);
+
+// ==================== IP MANAGEMENT HELPERS ====================
+function getClientIP(req) {
+    // Handle proxied requests
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+        return forwarded.split(',')[0].trim();
+    }
+    return req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
+}
+
+function isIPBanned(ip) {
+    const banExpiry = ipBans.get(ip);
+    if (banExpiry) {
+        if (Date.now() < banExpiry) {
+            return true;
+        }
+        // Ban expired, remove it
+        ipBans.delete(ip);
+    }
+    return false;
+}
+
+function banIP(ip, reason) {
+    const expiry = Date.now() + RATE_LIMIT.ws.banDurationMs;
+    ipBans.set(ip, expiry);
+    log(`Banned IP ${ip} for ${RATE_LIMIT.ws.banDurationMs / 1000}s - Reason: ${reason}`, 'WARN');
+}
+
+function trackIPConnection(ip, ws) {
+    if (!ipConnections.has(ip)) {
+        ipConnections.set(ip, new Set());
+    }
+    ipConnections.get(ip).add(ws);
+}
+
+function untrackIPConnection(ip, ws) {
+    const connections = ipConnections.get(ip);
+    if (connections) {
+        connections.delete(ws);
+        if (connections.size === 0) {
+            ipConnections.delete(ip);
+        }
+    }
+}
+
+function getIPConnectionCount(ip) {
+    const connections = ipConnections.get(ip);
+    return connections ? connections.size : 0;
+}
+
+// Check message rate for a client
+function checkMessageRate(playerId) {
+    const now = Date.now();
+    let rateData = clientMessageRates.get(playerId);
+
+    if (!rateData || now - rateData.windowStart > 1000) {
+        // New window
+        rateData = { count: 1, windowStart: now };
+        clientMessageRates.set(playerId, rateData);
+        return true;
+    }
+
+    rateData.count++;
+    if (rateData.count > RATE_LIMIT.ws.maxMessagesPerSecond) {
+        return false; // Rate exceeded
+    }
+    return true;
+}
+
+// Cleanup old rate data periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [playerId, data] of clientMessageRates) {
+        if (now - data.windowStart > 5000) {
+            clientMessageRates.delete(playerId);
+        }
+    }
+    // Also cleanup expired bans
+    for (const [ip, expiry] of ipBans) {
+        if (now >= expiry) {
+            ipBans.delete(ip);
+        }
+    }
+}, 10000); // Every 10 seconds
 
 // ==================== LEADERBOARD ====================
 let leaderboard = [];
@@ -1803,12 +1943,20 @@ function startWaveInRoom(room) {
 }
 
 // ==================== WEBSOCKET HANDLING ====================
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, request) => {
+    const ip = getClientIP(request);
     const playerId = uuidv4();
+
+    // Track this connection
+    trackIPConnection(ip, ws);
+    ws._clientIP = ip;  // Store IP for later reference
+    ws._playerId = playerId;
+    ws._messageViolations = 0;  // Track rate limit violations
+
     const player = createPlayer(ws, playerId);
     const room = getPlayerRoom(playerId);
 
-    log(`New WebSocket connection from player ${playerId} in room ${room ? room.id : 'unknown'}`, 'INFO');
+    log(`New WebSocket connection from player ${playerId} (IP: ${ip}) in room ${room ? room.id : 'unknown'}`, 'INFO');
 
     // Send initial lobby/game state to new player
     const initMessage = {
@@ -1864,6 +2012,19 @@ wss.on('connection', (ws) => {
     }
 
     ws.on('message', (data) => {
+        // Check message rate limit
+        if (!checkMessageRate(playerId)) {
+            ws._messageViolations++;
+            if (ws._messageViolations >= 3) {
+                // Too many violations, ban the IP
+                banIP(ws._clientIP, 'Message rate limit exceeded repeatedly');
+                ws.close(1008, 'Rate limit exceeded');
+                return;
+            }
+            // Skip processing this message but don't disconnect yet
+            return;
+        }
+
         try {
             const message = JSON.parse(data);
             handleMessage(playerId, message);
@@ -1873,6 +2034,9 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('close', () => {
+        // Untrack this connection
+        untrackIPConnection(ws._clientIP, ws);
+        clientMessageRates.delete(playerId);
         log(`WebSocket closed for ${playerId}`, 'WARN');
         removePlayer(playerId);
     });
