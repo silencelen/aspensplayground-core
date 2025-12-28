@@ -36,12 +36,19 @@ const ipConnections = new Map();  // IP -> Set of WebSocket connections
 const ipBans = new Map();         // IP -> ban expiry timestamp
 const clientMessageRates = new Map(); // playerId -> { count, windowStart }
 
+// ==================== NUMERIC KEY HELPER ====================
+// Convert grid coordinates to numeric key (avoids string concatenation in hot paths)
+// Formula: x * 100 + z (works for grids up to 100x100)
+function gridKey(x, z) {
+    return x * 100 + z;
+}
+
 // ==================== MIN-HEAP PRIORITY QUEUE ====================
 // Binary heap for O(log n) A* pathfinding operations
 class MinHeap {
     constructor() {
         this.heap = [];
-        this.indices = new Map(); // key -> index for O(1) lookup
+        this.indices = new Map(); // numeric key -> index for O(1) lookup
     }
 
     get length() {
@@ -49,7 +56,7 @@ class MinHeap {
     }
 
     push(node) {
-        const key = `${node.x},${node.z}`;
+        const key = gridKey(node.x, node.z);
         this.heap.push(node);
         this.indices.set(key, this.heap.length - 1);
         this._bubbleUp(this.heap.length - 1);
@@ -58,8 +65,7 @@ class MinHeap {
     pop() {
         if (this.heap.length === 0) return null;
         const min = this.heap[0];
-        const key = `${min.x},${min.z}`;
-        this.indices.delete(key);
+        this.indices.delete(gridKey(min.x, min.z));
 
         if (this.heap.length === 1) {
             this.heap.pop();
@@ -68,18 +74,17 @@ class MinHeap {
 
         const last = this.heap.pop();
         this.heap[0] = last;
-        this.indices.set(`${last.x},${last.z}`, 0);
+        this.indices.set(gridKey(last.x, last.z), 0);
         this._bubbleDown(0);
         return min;
     }
 
     has(x, z) {
-        return this.indices.has(`${x},${z}`);
+        return this.indices.has(gridKey(x, z));
     }
 
     updateF(x, z, newF) {
-        const key = `${x},${z}`;
-        const idx = this.indices.get(key);
+        const idx = this.indices.get(gridKey(x, z));
         if (idx === undefined) return false;
 
         const oldF = this.heap[idx].f;
@@ -128,8 +133,8 @@ class MinHeap {
         const nodeJ = this.heap[j];
         this.heap[i] = nodeJ;
         this.heap[j] = nodeI;
-        this.indices.set(`${nodeI.x},${nodeI.z}`, j);
-        this.indices.set(`${nodeJ.x},${nodeJ.z}`, i);
+        this.indices.set(gridKey(nodeI.x, nodeI.z), j);
+        this.indices.set(gridKey(nodeJ.x, nodeJ.z), i);
     }
 }
 
@@ -312,6 +317,110 @@ const EntityCache = {
         // Comment these out if you want aggressive caching across tick phases
         this._playersDirty = true;
         this._zombiesDirty = true;
+    }
+};
+
+// ==================== OBJECT POOLS ====================
+// Reuse objects to reduce GC pressure from frequent allocations
+
+// Zombie object pool - avoids creating new objects every spawn
+const ZombiePool = {
+    pool: [],
+    maxSize: 150,  // Max pooled objects (above absoluteMaxZombies)
+
+    // Get a zombie object from pool or create new one
+    acquire(id, type, position, props) {
+        let zombie;
+        if (this.pool.length > 0) {
+            zombie = this.pool.pop();
+        } else {
+            zombie = {
+                id: null,
+                type: null,
+                position: { x: 0, y: 0, z: 0 },
+                rotation: 0,
+                health: 0,
+                maxHealth: 0,
+                speed: 0,
+                damage: 0,
+                scale: 1,
+                isAlive: true,
+                targetPlayerId: null,
+                lastAttack: 0,
+                // Path data (reused)
+                path: null,
+                pathIndex: 0,
+                lastPathUpdate: 0,
+                lastTargetPos: null,
+                stuckData: null
+            };
+        }
+
+        // Reset all fields
+        zombie.id = id;
+        zombie.type = type;
+        zombie.position.x = position.x;
+        zombie.position.y = position.y;
+        zombie.position.z = position.z;
+        zombie.rotation = 0;
+        zombie.health = props.health;
+        zombie.maxHealth = props.health;
+        zombie.speed = props.speed * (0.9 + Math.random() * 0.2);
+        zombie.damage = props.damage;
+        zombie.scale = props.scale;
+        zombie.isAlive = true;
+        zombie.targetPlayerId = null;
+        zombie.lastAttack = 0;
+        zombie.path = null;
+        zombie.pathIndex = 0;
+        zombie.lastPathUpdate = 0;
+        zombie.lastTargetPos = null;
+        zombie.stuckData = null;
+
+        return zombie;
+    },
+
+    // Return zombie to pool for reuse
+    release(zombie) {
+        if (this.pool.length < this.maxSize) {
+            // Clear references to help GC
+            zombie.path = null;
+            zombie.lastTargetPos = null;
+            zombie.stuckData = null;
+            zombie.targetPlayerId = null;
+            this.pool.push(zombie);
+        }
+        // If pool is full, let object be GC'd
+    },
+
+    // Clear entire pool (on game reset)
+    clear() {
+        this.pool.length = 0;
+    }
+};
+
+// Vector/Position pool for temporary calculations
+const Vec3Pool = {
+    pool: [],
+    maxSize: 50,
+
+    acquire(x = 0, y = 0, z = 0) {
+        let vec;
+        if (this.pool.length > 0) {
+            vec = this.pool.pop();
+            vec.x = x;
+            vec.y = y;
+            vec.z = z;
+        } else {
+            vec = { x, y, z };
+        }
+        return vec;
+    },
+
+    release(vec) {
+        if (this.pool.length < this.maxSize) {
+            this.pool.push(vec);
+        }
     }
 };
 
@@ -1020,11 +1129,11 @@ const Pathfinder = {
 
         // A* implementation with MinHeap for O(log n) operations
         const openSet = new MinHeap();
-        const closedSet = new Set();
-        const cameFrom = new Map();
-        const gScore = new Map();
+        const closedSet = new Set();  // Uses numeric keys
+        const cameFrom = new Map();   // Uses numeric keys
+        const gScore = new Map();     // Uses numeric keys
 
-        const startKey = `${startGX},${startGZ}`;
+        const startKey = gridKey(startGX, startGZ);
 
         gScore.set(startKey, 0);
         const startF = this.heuristic(startGX, startGZ, goalGX, goalGZ);
@@ -1049,7 +1158,7 @@ const Pathfinder = {
 
             // Get node with lowest fScore - O(log n) with heap
             const current = openSet.pop();
-            const currentKey = `${current.x},${current.z}`;
+            const currentKey = gridKey(current.x, current.z);
 
             if (current.x === goalGX && current.z === goalGZ) {
                 // Reconstruct path
@@ -1061,7 +1170,7 @@ const Pathfinder = {
             for (const neighbor of neighbors) {
                 const nx = current.x + neighbor.dx;
                 const nz = current.z + neighbor.dz;
-                const neighborKey = `${nx},${nz}`;
+                const neighborKey = gridKey(nx, nz);
 
                 if (closedSet.has(neighborKey)) continue;
                 if (!NavGrid.isWalkable(nx, nz)) continue;
@@ -1110,8 +1219,7 @@ const Pathfinder = {
                 x: NavGrid.gridToWorldX(current.x),
                 z: NavGrid.gridToWorldZ(current.z)
             });
-            const key = `${current.x},${current.z}`;
-            current = cameFrom.get(key);
+            current = cameFrom.get(gridKey(current.x, current.z));
         }
         path.reverse(); // O(n) once instead of O(n) per unshift
 
@@ -1616,20 +1724,8 @@ function spawnZombie() {
 
     const props = typeProps[zombieType];
 
-    const zombie = {
-        id: id,
-        type: zombieType,
-        position: position,
-        rotation: 0,
-        health: props.health,
-        maxHealth: props.health,
-        speed: props.speed * (0.9 + Math.random() * 0.2),
-        damage: props.damage,
-        scale: props.scale,
-        isAlive: true,
-        targetPlayerId: null,
-        lastAttack: 0
-    };
+    // Use object pool to reduce GC pressure
+    const zombie = ZombiePool.acquire(id, zombieType, position, props);
 
     GameState.zombies.set(id, zombie);
     GameState.zombiesSpawned++;
@@ -1894,7 +1990,11 @@ function killZombie(zombieId, killerId, isHeadshot) {
 
     // Clean up zombie after delay
     setTimeout(() => {
-        GameState.zombies.delete(zombieId);
+        const zombie = GameState.zombies.get(zombieId);
+        if (zombie) {
+            ZombiePool.release(zombie);  // Return to pool for reuse
+            GameState.zombies.delete(zombieId);
+        }
     }, 5000);
 }
 
@@ -2170,7 +2270,8 @@ function startGame() {
     GameState.lastZombieId = 0;
     GameState.lastPickupId = 0;
 
-    // Clear existing zombies and pickups
+    // Clear existing zombies and pickups (release to pool first)
+    GameState.zombies.forEach(zombie => ZombiePool.release(zombie));
     GameState.zombies.clear();
     GameState.pickups.clear();
 
@@ -2203,6 +2304,8 @@ function stopGame() {
         GameState.spawnInterval = null;
     }
 
+    // Release zombies to pool before clearing
+    GameState.zombies.forEach(zombie => ZombiePool.release(zombie));
     GameState.zombies.clear();
     GameState.pickups.clear();
 }
@@ -2404,7 +2507,8 @@ function stopGameInRoom(room) {
         room.countdownTimer = null;
     }
 
-    // Clear zombies and pickups
+    // Release zombies to pool before clearing
+    room.zombies.forEach(zombie => ZombiePool.release(zombie));
     room.zombies.clear();
     room.pickups.clear();
 
