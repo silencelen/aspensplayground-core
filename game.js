@@ -6,7 +6,8 @@
 
 // ==================== DEV SETTINGS ====================
 const DevSettings = {
-    godMode: false  // When true, player takes no damage in singleplayer
+    godMode: false,      // When true, player takes no damage in singleplayer
+    infiniteAmmo: false  // When true, ammo and grenades are not consumed
 };
 
 // ==================== STATIC VECTOR3 CONSTANTS ====================
@@ -7808,7 +7809,16 @@ function onKeyDown(event) {
             if (GameState.mode === 'singleplayer') {
                 DevSettings.godMode = !DevSettings.godMode;
                 DebugLog.log(`God Mode: ${DevSettings.godMode ? 'ENABLED' : 'DISABLED'}`, DevSettings.godMode ? 'success' : 'warn');
-                showGodModeIndicator();
+                showDevIndicators();
+            }
+            break;
+        case 'F6':
+            // Dev: Toggle infinite ammo (singleplayer only)
+            event.preventDefault();
+            if (GameState.mode === 'singleplayer') {
+                DevSettings.infiniteAmmo = !DevSettings.infiniteAmmo;
+                DebugLog.log(`Infinite Ammo: ${DevSettings.infiniteAmmo ? 'ENABLED' : 'DISABLED'}`, DevSettings.infiniteAmmo ? 'success' : 'warn');
+                showDevIndicators();
             }
             break;
         case 'KeyE':
@@ -7915,8 +7925,8 @@ function shoot() {
 
     weapon.lastFired = now;
 
-    // Only consume ammo for non-pistol weapons
-    if (!isPistol) {
+    // Only consume ammo for non-pistol weapons (unless infinite ammo is enabled)
+    if (!isPistol && !(DevSettings.infiniteAmmo && GameState.mode === 'singleplayer')) {
         weapon.ammo--;
     }
 
@@ -8855,8 +8865,10 @@ function createLaserBeamVisual(start, end, continuous = false) {
 
 // Throw grenade
 function throwGrenade() {
-    if (weapon.grenades <= 0) return;
-    weapon.grenades--;
+    if (weapon.grenades <= 0 && !(DevSettings.infiniteAmmo && GameState.mode === 'singleplayer')) return;
+    if (!(DevSettings.infiniteAmmo && GameState.mode === 'singleplayer')) {
+        weapon.grenades--;
+    }
 
     const origin = camera.getWorldPosition(new THREE.Vector3());
     const direction = camera.getWorldDirection(new THREE.Vector3());
@@ -12417,12 +12429,15 @@ async function singlePlayerGameOver() {
     document.getElementById('stat-favorite-weapon').textContent = GameStats.getFavoriteWeapon();
     document.getElementById('stat-best-streak').textContent = GameStats.bestKillStreak;
 
-    // Submit score to leaderboard (not in god mode)
+    // Submit score to leaderboard (not in dev mode)
     const rankResult = document.getElementById('rank-result');
     let result = { added: false, rank: -1 };
 
-    if (DevSettings.godMode) {
-        rankResult.innerHTML = `<span style="color: #ff6600;">GOD MODE - Score not recorded</span>`;
+    if (DevSettings.godMode || DevSettings.infiniteAmmo) {
+        const cheats = [];
+        if (DevSettings.godMode) cheats.push('GOD MODE');
+        if (DevSettings.infiniteAmmo) cheats.push('INFINITE AMMO');
+        rankResult.innerHTML = `<span style="color: #ff6600;">${cheats.join(' + ')} - Score not recorded</span>`;
         await fetchLeaderboard(); // Just refresh leaderboard
     } else {
         const playerName = getPlayerName();
@@ -12449,10 +12464,14 @@ async function singlePlayerGameOver() {
 }
 
 function showGodModeIndicator() {
-    let indicator = document.getElementById('god-mode-indicator');
+    showDevIndicators();
+}
+
+function showDevIndicators() {
+    let indicator = document.getElementById('dev-mode-indicator');
     if (!indicator) {
         indicator = document.createElement('div');
-        indicator.id = 'god-mode-indicator';
+        indicator.id = 'dev-mode-indicator';
         indicator.style.cssText = `
             position: fixed;
             top: 10px;
@@ -12470,8 +12489,12 @@ function showGodModeIndicator() {
         document.body.appendChild(indicator);
     }
 
-    if (DevSettings.godMode) {
-        indicator.textContent = 'GOD MODE';
+    const modes = [];
+    if (DevSettings.godMode) modes.push('GOD MODE');
+    if (DevSettings.infiniteAmmo) modes.push('INFINITE AMMO');
+
+    if (modes.length > 0) {
+        indicator.textContent = modes.join(' | ');
         indicator.style.display = 'block';
     } else {
         indicator.style.display = 'none';
