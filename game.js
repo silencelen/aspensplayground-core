@@ -12984,21 +12984,23 @@ async function singlePlayerGameOver() {
         const cheats = [];
         if (DevSettings.godMode) cheats.push('GOD MODE');
         if (DevSettings.infiniteAmmo) cheats.push('INFINITE AMMO');
-        rankResult.innerHTML = `<span style="color: #ff6600;">${cheats.join(' + ')} - Score not recorded</span>`;
+        if (rankResult) rankResult.innerHTML = `<span style="color: #ff6600;">${cheats.join(' + ')} - Score not recorded</span>`;
         await fetchLeaderboard(); // Just refresh leaderboard
     } else {
         const playerName = getPlayerName();
         result = await submitScore(playerName);  // Score tracked server-side
 
         // Display rank result
-        if (result.added && result.rank > 0) {
-            rankResult.innerHTML = `<span class="new-highscore">NEW HIGH SCORE! #${result.rank}</span>`;
-        } else if (cachedLeaderboard.length > 0) {
-            const minScore = cachedLeaderboard[cachedLeaderboard.length - 1].score;
-            const diff = minScore - playerState.score;
-            rankResult.textContent = `${diff.toLocaleString()} points away from Top 10`;
-        } else {
-            rankResult.textContent = '';
+        if (rankResult) {
+            if (result.added && result.rank > 0) {
+                rankResult.innerHTML = `<span class="new-highscore">NEW HIGH SCORE! #${result.rank}</span>`;
+            } else if (cachedLeaderboard.length > 0) {
+                const minScore = cachedLeaderboard[cachedLeaderboard.length - 1].score;
+                const diff = minScore - playerState.score;
+                rankResult.textContent = `${diff.toLocaleString()} points away from Top 10`;
+            } else {
+                rankResult.textContent = '';
+            }
         }
     }
 
