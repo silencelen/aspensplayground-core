@@ -1481,6 +1481,9 @@ function switchWeapon(weaponName) {
     weapon.reserveAmmo = weapon.inventory[weaponName].reserve;
     weapon.isFiring = false;
 
+    // Notify server of weapon switch (for server-side damage calculation)
+    sendMessage({ type: 'weaponSwitch', weapon: weaponName });
+
     // Update weapon model
     updateWeaponModel();
 

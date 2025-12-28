@@ -1140,8 +1140,19 @@ const CONFIG = {
         headshot: 50,
         waveBonus: 500
     },
+    // Server-authoritative weapon damage (must match client WEAPONS config)
+    weapons: {
+        pistol: { damage: 20, headshotMultiplier: 2 },
+        smg: { damage: 15, headshotMultiplier: 2 },
+        shotgun: { damage: 12, pellets: 8, headshotMultiplier: 1.5 },  // 12 per pellet
+        rocketLauncher: { damage: 250, splashDamage: 150, headshotMultiplier: 1 },
+        laserGun: { damage: 25, headshotMultiplier: 1.5 }
+    },
     tickRate: 10 // Server updates per second (reduced from 20 for less lag)
 };
+
+// Valid weapon names for validation
+const VALID_WEAPONS = Object.keys(CONFIG.weapons);
 
 // ==================== PLAYER MANAGEMENT ====================
 function createPlayer(ws, id) {
@@ -1163,6 +1174,7 @@ function createPlayer(ws, id) {
         isReady: false,
         color: colors[playerNum % colors.length],
         cosmetic: 'default',
+        currentWeapon: 'pistol',  // Track current weapon for server-side damage calc
         lastUpdate: Date.now(),
         kills: 0,
         score: 0
@@ -2384,10 +2396,27 @@ function handleMessage(playerId, message) {
                 direction: message.direction
             }, playerId);
 
-            // Check if hit zombie with validated damage
+            // Calculate damage server-side based on player's current weapon
             if (message.hitZombieId && typeof message.hitZombieId === 'string') {
-                const damage = isValidNumber(message.damage, 1, 100) ? message.damage : 25;
-                damageZombie(message.hitZombieId, damage, playerId, !!message.isHeadshot);
+                const weaponConfig = CONFIG.weapons[player.currentWeapon];
+                if (weaponConfig) {
+                    let damage = weaponConfig.damage;
+                    const isHeadshot = !!message.isHeadshot;
+
+                    // Apply headshot multiplier
+                    if (isHeadshot && weaponConfig.headshotMultiplier) {
+                        damage *= weaponConfig.headshotMultiplier;
+                    }
+
+                    damageZombie(message.hitZombieId, damage, playerId, isHeadshot);
+                }
+            }
+            break;
+
+        case 'weaponSwitch':
+            // Track player's current weapon for server-side damage calculation
+            if (message.weapon && VALID_WEAPONS.includes(message.weapon)) {
+                player.currentWeapon = message.weapon;
             }
             break;
 
