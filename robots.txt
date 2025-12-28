@@ -1,0 +1,22 @@
+# Robots.txt for Aspen's Playground
+# https://aspensplayground.com/
+
+User-agent: *
+Allow: /
+Allow: /privacy.html
+Allow: /terms.html
+
+# Disallow server files and development directories
+Disallow: /node_modules/
+Disallow: /ssl/
+Disallow: /.claude/
+Disallow: /server.js
+Disallow: /package.json
+Disallow: /package-lock.json
+Disallow: /*.log
+
+# Sitemap location
+Sitemap: https://aspensplayground.com/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1

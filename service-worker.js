@@ -1,5 +1,5 @@
 // Service Worker for Aspen's Playground PWA
-const CACHE_NAME = 'aspens-playground-v1';
+const CACHE_NAME = 'aspens-playground-v2';
 const OFFLINE_URL = '/offline.html';
 
 // Assets to cache on install
@@ -10,6 +10,8 @@ const ASSETS_TO_CACHE = [
     '/manifest.json',
     '/privacy.html',
     '/terms.html',
+    '/robots.txt',
+    '/sitemap.xml',
     '/modules/config.js',
     '/modules/ui.js',
     '/modules/maps/MapManager.js',
