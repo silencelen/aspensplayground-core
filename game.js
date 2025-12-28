@@ -1565,14 +1565,19 @@ async function fetchLeaderboard() {
     try {
         const response = await fetch('/api/leaderboard');
         if (response.ok) {
-            cachedLeaderboard = await response.json();
-            DebugLog.log(`Fetched ${cachedLeaderboard.length} leaderboard entries`, 'info');
-            return cachedLeaderboard;
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                cachedLeaderboard = data;
+                DebugLog.log(`Fetched ${cachedLeaderboard.length} leaderboard entries`, 'info');
+                return cachedLeaderboard;
+            } else {
+                DebugLog.log('Leaderboard response was not an array', 'warn');
+            }
         }
     } catch (e) {
         DebugLog.log(`Failed to fetch leaderboard: ${e.message}`, 'error');
     }
-    return [];
+    return cachedLeaderboard;
 }
 
 async function submitScore(name) {
