@@ -8372,6 +8372,13 @@ function shoot() {
                     if (GameState.mode === 'singleplayer') {
                         damageSinglePlayerZombie(id, damage, isHeadshot);
                     } else {
+                        // Show damage numbers immediately for client feedback
+                        DamageNumbers.show(
+                            zombie.position,
+                            damage,
+                            isHeadshot,
+                            damage >= 50
+                        );
                         sendToServer({
                             type: 'shoot',
                             origin: { x: origin.x, y: origin.y, z: origin.z },
@@ -9063,6 +9070,23 @@ function fireLaser(origin, direction, damage) {
                 showHitMarker(isHeadshot, intersects[0].point);
                 if (GameState.mode === 'singleplayer') {
                     damageSinglePlayerZombie(id, actualDamage, isHeadshot);
+                } else {
+                    // Show damage numbers immediately for client feedback
+                    DamageNumbers.show(
+                        zombie.position,
+                        actualDamage,
+                        isHeadshot,
+                        actualDamage >= 50
+                    );
+                    // Send hit to server
+                    sendToServer({
+                        type: 'shoot',
+                        origin: { x: origin.x, y: origin.y, z: origin.z },
+                        direction: { x: direction.x, y: direction.y, z: direction.z },
+                        hitZombieId: id,
+                        isHeadshot: isHeadshot,
+                        damage: actualDamage
+                    });
                 }
             }
         });
