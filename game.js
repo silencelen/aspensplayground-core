@@ -7719,6 +7719,7 @@ const mobileInput = {
 
 // ==================== CONTROLS ====================
 let controlsInitialized = false;
+let mobileAbortController = null;
 
 // Named wheel handler for proper cleanup
 function onWheel(e) {
@@ -7758,6 +7759,12 @@ function cleanupControls() {
     document.removeEventListener('pointerlockchange', onPointerLockChange);
     document.removeEventListener('wheel', onWheel);
 
+    // Clean up mobile controls
+    if (mobileAbortController) {
+        mobileAbortController.abort();
+        mobileAbortController = null;
+    }
+
     // Reset control states
     keys.forward = false;
     keys.backward = false;
@@ -7768,6 +7775,13 @@ function cleanupControls() {
 
 function initMobileControls() {
     DebugLog.log('Initializing mobile controls...', 'info');
+
+    // Clean up any existing listeners first, then create new controller
+    if (mobileAbortController) {
+        mobileAbortController.abort();
+    }
+    mobileAbortController = new AbortController();
+    const signal = mobileAbortController.signal;
 
     const mobileControls = document.getElementById('mobile-controls');
     const joystickBase = document.getElementById('joystick-base');
@@ -7818,7 +7832,7 @@ function initMobileControls() {
         const touch = e.changedTouches[0];
         mobileInput.joystickTouch = touch.identifier;
         updateJoystick(touch);
-    }, { passive: false });
+    }, { passive: false, signal });
 
     joystickBase.addEventListener('touchmove', (e) => {
         e.preventDefault();
@@ -7828,7 +7842,7 @@ function initMobileControls() {
                 break;
             }
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     joystickBase.addEventListener('touchend', (e) => {
         for (let touch of e.changedTouches) {
@@ -7837,16 +7851,16 @@ function initMobileControls() {
                 break;
             }
         }
-    }, { passive: true });
+    }, { passive: true, signal });
 
-    joystickBase.addEventListener('touchcancel', resetJoystick, { passive: true });
+    joystickBase.addEventListener('touchcancel', resetJoystick, { passive: true, signal });
 
     // Sprint button (toggle)
     sprintBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
         keys.sprint = !keys.sprint;
         sprintBtn.classList.toggle('active', keys.sprint);
-    }, { passive: false });
+    }, { passive: false, signal });
 
     // Look area handling - improved sensitivity and smoothing
     lookArea.addEventListener('touchstart', (e) => {
@@ -7857,7 +7871,7 @@ function initMobileControls() {
             x: touch.clientX,
             y: touch.clientY
         };
-    }, { passive: false });
+    }, { passive: false, signal });
 
     lookArea.addEventListener('touchmove', (e) => {
         e.preventDefault();
@@ -7882,7 +7896,7 @@ function initMobileControls() {
                 break;
             }
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     lookArea.addEventListener('touchend', (e) => {
         for (let touch of e.changedTouches) {
@@ -7891,7 +7905,7 @@ function initMobileControls() {
                 break;
             }
         }
-    }, { passive: true });
+    }, { passive: true, signal });
 
     // Shoot button - supports automatic weapons and camera panning while firing
     let shootInterval = null;
@@ -7921,7 +7935,7 @@ function initMobileControls() {
                 if (mobileInput.shooting) shoot();
             }, stats.fireRate);
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     // Allow camera panning while holding fire button
     shootBtn.addEventListener('touchmove', (e) => {
@@ -7947,7 +7961,7 @@ function initMobileControls() {
                 break;
             }
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     shootBtn.addEventListener('touchend', (e) => {
         for (let touch of e.changedTouches) {
@@ -7962,7 +7976,7 @@ function initMobileControls() {
                 break;
             }
         }
-    }, { passive: true });
+    }, { passive: true, signal });
 
     shootBtn.addEventListener('touchcancel', () => {
         mobileInput.shooting = false;
@@ -7972,7 +7986,7 @@ function initMobileControls() {
             clearInterval(shootInterval);
             shootInterval = null;
         }
-    }, { passive: true });
+    }, { passive: true, signal });
 
     // Reload button
     reloadBtn.addEventListener('touchstart', (e) => {
@@ -7983,7 +7997,7 @@ function initMobileControls() {
             hapticFeedback(HAPTIC.RELOAD);
             reload();
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     // Jump button
     jumpBtn.addEventListener('touchstart', (e) => {
@@ -7993,7 +8007,7 @@ function initMobileControls() {
             playerVelocity.y = CONFIG.player.jumpForce;
             canJump = false;
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     // Interact button
     interactBtn.addEventListener('touchstart', (e) => {
@@ -8008,7 +8022,7 @@ function initMobileControls() {
             nearbyPickup = null;
             updateInteractPrompt();
         }
-    }, { passive: false });
+    }, { passive: false, signal });
 
     // Weapon switching buttons
     const weaponList = ['pistol', 'smg', 'shotgun', 'rocketLauncher', 'laserGun'];
@@ -8022,7 +8036,7 @@ function initMobileControls() {
                 switchWeapon(weaponName);
                 updateMobileWeaponButtons();
             }
-        }, { passive: false });
+        }, { passive: false, signal });
     });
 
     // Mobile grenade button
@@ -8032,7 +8046,7 @@ function initMobileControls() {
             e.preventDefault();
             hapticFeedback(HAPTIC.BUTTON);
             throwGrenade();
-        }, { passive: false });
+        }, { passive: false, signal });
     }
 
     // Initialize weapon icons on buttons
