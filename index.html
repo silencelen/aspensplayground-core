@@ -1756,7 +1756,7 @@
 
     <div id="crosshair"></div>
 
-    <div id="interact-prompt"></div>
+    <div id="interact-prompt" role="alert" aria-live="assertive"></div>
 
     <div id="damage-overlay"></div>
 
@@ -1779,57 +1779,57 @@
     </div>
 
     <!-- Boss Health Bar -->
-    <div id="boss-health-container">
+    <div id="boss-health-container" role="status" aria-label="Boss status" aria-live="polite">
         <div id="boss-name">BOSS</div>
-        <div id="boss-health-bar-bg">
+        <div id="boss-health-bar-bg" role="progressbar" aria-label="Boss health" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
             <div id="boss-health-bar" style="width: 100%"></div>
         </div>
     </div>
 
     <!-- Top HUD - Score, Kills, Wave -->
-    <div id="hud-top">
-        <div id="wave-display">WAVE 1 <span id="enemy-count" style="color: #ff4444; font-size: 18px; margin-left: 10px;">- 0 ENEMIES LEFT</span></div>
+    <div id="hud-top" role="status" aria-label="Game status">
+        <div id="wave-display" aria-live="polite" aria-atomic="true">WAVE 1 <span id="enemy-count" style="color: #ff4444; font-size: 18px; margin-left: 10px;">- 0 ENEMIES LEFT</span></div>
         <div class="hud-stats">
             <div class="hud-stat">
                 <span class="stat-label">SCORE</span>
-                <span class="stat-value" id="score-display">0</span>
+                <span class="stat-value" id="score-display" aria-live="off">0</span>
             </div>
             <div class="hud-stat">
                 <span class="stat-label">KILLS</span>
-                <span class="stat-value" id="kills-display">0</span>
+                <span class="stat-value" id="kills-display" aria-live="off">0</span>
             </div>
         </div>
     </div>
 
     <!-- Bottom HUD -->
-    <div id="hud">
+    <div id="hud" role="status" aria-label="Player status">
         <div class="hud-panel" id="health-panel">
-            <div class="hud-label">HEALTH</div>
-            <div id="health-bar-container">
+            <div class="hud-label" id="health-label">HEALTH</div>
+            <div id="health-bar-container" role="progressbar" aria-labelledby="health-label" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
                 <div id="health-bar" style="width: 100%"></div>
             </div>
         </div>
         <div class="hud-panel" id="weapon-panel">
             <div class="hud-label">WEAPON</div>
-            <div class="hud-value" id="weapon-display">Pistol</div>
+            <div class="hud-value" id="weapon-display" aria-live="polite">Pistol</div>
             <div class="hud-label" style="margin-top: 5px">AMMO</div>
-            <div class="hud-value" id="ammo-display">12 / 60</div>
+            <div class="hud-value" id="ammo-display" aria-live="off">12 / 60</div>
             <div class="hud-label" style="margin-top: 5px">GRENADES [G]</div>
-            <div class="hud-value" id="grenade-display">3</div>
+            <div class="hud-value" id="grenade-display" aria-live="off">3</div>
         </div>
     </div>
 
     <!-- Kill Feed (top-right) -->
-    <div id="kill-feed"></div>
+    <div id="kill-feed" role="log" aria-live="polite" aria-label="Kill feed"></div>
 
     <!-- Damage Numbers Container -->
     <div id="damage-numbers"></div>
 
     <!-- Multiplayer Panel -->
-    <div id="multiplayer-panel" style="display: none;">
-        <div id="connection-status">○ Connecting...</div>
-        <div id="player-count">Players: 0</div>
-        <div id="player-list"></div>
+    <div id="multiplayer-panel" style="display: none;" role="status" aria-label="Multiplayer status">
+        <div id="connection-status" aria-live="polite">○ Connecting...</div>
+        <div id="player-count" aria-live="polite">Players: 0</div>
+        <div id="player-list" role="list" aria-label="Connected players"></div>
     </div>
 
     <div id="start-screen">
@@ -1913,7 +1913,7 @@
                 <h2 class="shop-title" id="shop-title">UPGRADE SHOP</h2>
                 <div class="shop-points">POINTS: <span id="shop-points">0</span></div>
             </div>
-            <div class="shop-subtitle">Next wave in <span id="shop-countdown">30</span>s</div>
+            <div class="shop-subtitle" aria-live="polite">Next wave in <span id="shop-countdown">30</span>s</div>
             <div class="shop-disclaimer">Are you willing to risk your score for a few measly upgrades?</div>
             <div class="shop-weapons">
                 <div class="weapon-upgrade-card" data-weapon="pistol">
