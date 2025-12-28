@@ -835,6 +835,29 @@ function setElementStyle(id, property, value) {
     if (el) el.style[property] = value;
 }
 
+// ==================== HAPTIC FEEDBACK ====================
+// Vibration durations for different events
+const HAPTIC = {
+    TAP: 25,           // Quick button tap
+    BUTTON: 50,        // Standard button press
+    WEAPON_SWITCH: 40, // Switching weapons
+    RELOAD: [50, 30, 50], // Reload pattern
+    DAMAGE: 100,       // Taking damage
+    KILL: [30, 20, 30],   // Killing an enemy
+    DEATH: [100, 50, 100, 50, 200] // Player death
+};
+
+// Trigger haptic feedback with feature detection
+function hapticFeedback(pattern = HAPTIC.BUTTON) {
+    if (navigator.vibrate && isMobile) {
+        try {
+            navigator.vibrate(pattern);
+        } catch (e) {
+            // Silently fail if vibration not supported
+        }
+    }
+}
+
 // ==================== THREE.JS SETUP ====================
 let scene, camera, renderer;
 let player, zombies = new Map(), pickups = new Map();
@@ -7735,6 +7758,7 @@ function initMobileControls() {
 
     shootBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        hapticFeedback(HAPTIC.TAP);
         const touch = e.changedTouches[0];
         mobileInput.shooting = true;
         shootBtn.classList.add('firing');
@@ -7812,8 +7836,10 @@ function initMobileControls() {
     // Reload button
     reloadBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        hapticFeedback(HAPTIC.BUTTON);
         const stats = getWeaponStats();
         if (!weapon.isReloading && weapon.ammo < stats.magSize && weapon.reserveAmmo > 0) {
+            hapticFeedback(HAPTIC.RELOAD);
             reload();
         }
     }, { passive: false });
@@ -7821,6 +7847,7 @@ function initMobileControls() {
     // Jump button
     jumpBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        hapticFeedback(HAPTIC.TAP);
         if (canJump) {
             playerVelocity.y = CONFIG.player.jumpForce;
             canJump = false;
@@ -7830,6 +7857,7 @@ function initMobileControls() {
     // Interact button
     interactBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        hapticFeedback(HAPTIC.BUTTON);
         if (nearbyPickup) {
             if (GameState.mode === 'singleplayer') {
                 collectSinglePlayerPickup(nearbyPickup);
@@ -7849,6 +7877,7 @@ function initMobileControls() {
             const weaponIndex = parseInt(btn.dataset.weapon);
             const weaponName = !isNaN(weaponIndex) ? weaponList[weaponIndex] : btn.dataset.weapon;
             if (weaponName && weaponName !== weapon.current) {
+                hapticFeedback(HAPTIC.WEAPON_SWITCH);
                 switchWeapon(weaponName);
                 updateMobileWeaponButtons();
             }
@@ -7860,6 +7889,7 @@ function initMobileControls() {
     if (grenadeBtn) {
         grenadeBtn.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            hapticFeedback(HAPTIC.BUTTON);
             throwGrenade();
         }, { passive: false });
     }
