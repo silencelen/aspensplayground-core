@@ -826,6 +826,25 @@ const Pathfinder = {
 let scene, camera, renderer;
 let player, zombies = new Map(), pickups = new Map();
 let bullets = []; // Active bullet tracers
+
+// Cached zombie meshes for raycasting - avoids rebuilding array every shot
+let zombieMeshesCache = [];
+let zombieMeshesDirty = true;
+
+function getZombieMeshes() {
+    if (zombieMeshesDirty) {
+        zombieMeshesCache = [];
+        zombies.forEach(z => {
+            if (z.isAlive && z.mesh) zombieMeshesCache.push(z.mesh);
+        });
+        zombieMeshesDirty = false;
+    }
+    return zombieMeshesCache;
+}
+
+function invalidateZombieMeshCache() {
+    zombieMeshesDirty = true;
+}
 let nearbyPickup = null; // Pickup that can be collected with E key
 let clock, deltaTime;
 let raycaster;
@@ -3816,6 +3835,7 @@ function handleZombieSpawned(zombieData) {
         targetRotation: zombieData.rotation || 0
     };
     zombies.set(zombieData.id, zombieEntry);
+    invalidateZombieMeshCache();
 
     // Add to spatial grid for optimized collision detection
     SpatialGrid.insert(zombieEntry);
@@ -3850,6 +3870,7 @@ function handleZombieKilled(message) {
     const zombie = zombies.get(message.zombieId);
     if (zombie) {
         zombie.isAlive = false;
+        invalidateZombieMeshCache();
 
         DebugLog.log(`Zombie killed by ${message.killerId}${message.isHeadshot ? ' (HEADSHOT!)' : ''}`, 'success');
 
@@ -5471,6 +5492,7 @@ function animateZombieDeath(zombie) {
                     // Release mesh back to pool for reuse
                     ZombiePool.release(zombie.id);
                     zombies.delete(zombie.id);
+                    invalidateZombieMeshCache();
                 }
             };
             setTimeout(fadeAnimate, 2000);
@@ -7989,10 +8011,7 @@ function shoot() {
     spawnShellCasing(origin.clone(), baseDirection.clone());
 
     // Fire multiple pellets for shotgun
-    const zombieMeshes = [];
-    zombies.forEach(z => {
-        if (z.isAlive && z.mesh) zombieMeshes.push(z.mesh);
-    });
+    const zombieMeshes = getZombieMeshes();
 
     let totalHits = 0;
 
@@ -8702,10 +8721,7 @@ function fireLaser(origin, direction, damage) {
     }
 
     // Raycast for hit detection
-    const zombieMeshes = [];
-    zombies.forEach(z => {
-        if (z.isAlive && z.mesh) zombieMeshes.push(z.mesh);
-    });
+    const zombieMeshes = getZombieMeshes();
 
     raycaster.set(origin, direction);
     const intersects = raycaster.intersectObjects(zombieMeshes, true);
@@ -10755,6 +10771,7 @@ const WaveSystem = {
             walkCycle: Math.random() * Math.PI * 2
         };
         zombies.set(id, zombieEntry);
+        invalidateZombieMeshCache();
         SpatialGrid.insert(zombieEntry);
     }
 };
@@ -10897,6 +10914,7 @@ function spawnBoss(bossProps) {
         walkCycle: Math.random() * Math.PI * 2
     };
     zombies.set(id, zombieEntry);
+    invalidateZombieMeshCache();
     SpatialGrid.insert(zombieEntry);
 
     WaveSystem.currentBoss = zombieEntry;
@@ -11412,6 +11430,7 @@ function spawnSinglePlayerZombie() {
         walkCycle: Math.random() * Math.PI * 2
     };
     zombies.set(id, zombieEntry);
+    invalidateZombieMeshCache();
 
     // Add to spatial grid for optimized collision detection
     SpatialGrid.insert(zombieEntry);
@@ -12275,6 +12294,7 @@ function killSinglePlayerZombie(zombieId, isHeadshot) {
     if (!zombie) return;
 
     zombie.isAlive = false;
+    invalidateZombieMeshCache();
 
     // Minions don't count toward wave completion
     if (!zombie.isMinion) {
@@ -12321,6 +12341,7 @@ function killSinglePlayerZombie(zombieId, isHeadshot) {
                 animateZombieDeath(z);
             }
         });
+        invalidateZombieMeshCache();
     }
 
     // Death animation
