@@ -3117,8 +3117,9 @@ function updateParticles(delta) {
     for (let i = activeParticles.length - 1; i >= 0; i--) {
         const particle = activeParticles[i];
 
-        // Update position
-        particle.mesh.position.add(particle.velocity.clone().multiplyScalar(delta));
+        // Update position (use static vector to avoid allocation)
+        Vec3.temp.copy(particle.velocity).multiplyScalar(delta);
+        particle.mesh.position.add(Vec3.temp);
 
         // Apply gravity
         particle.velocity.y += gravity * delta;
@@ -8549,7 +8550,8 @@ function createDestructibleHitEffect(position, material) {
             }
 
             velocity.y -= 15 * 0.016; // Gravity
-            particle.position.add(velocity.clone().multiplyScalar(0.016));
+            Vec3.temp.copy(velocity).multiplyScalar(0.016);
+            particle.position.add(Vec3.temp);
             particle.rotation.x += 0.2;
             particle.rotation.y += 0.3;
             particle.material.opacity = 1 - elapsed * 2;
@@ -8612,7 +8614,8 @@ function createDestructionDebris(position, material, size) {
             const dt = 0.016;
             velocity.y -= 12 * dt; // Gravity
 
-            piece.position.add(velocity.clone().multiplyScalar(dt));
+            Vec3.temp.copy(velocity).multiplyScalar(dt);
+            piece.position.add(Vec3.temp);
             piece.rotation.x += angularVel.x * dt;
             piece.rotation.y += angularVel.y * dt;
             piece.rotation.z += angularVel.z * dt;
@@ -8953,8 +8956,9 @@ function updateProjectiles(deltaTime) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const proj = projectiles[i];
 
-        // Apply velocity
-        proj.mesh.position.add(proj.velocity.clone().multiplyScalar(deltaTime));
+        // Apply velocity (use static vector to avoid allocation)
+        Vec3.temp.copy(proj.velocity).multiplyScalar(deltaTime);
+        proj.mesh.position.add(Vec3.temp);
 
         // Apply gravity for grenades
         if (proj.gravity) {
@@ -9202,7 +9206,8 @@ function createMuzzleFlash() {
 
             // Move sparks
             sparks.forEach(spark => {
-                spark.position.add(spark.userData.velocity.clone().multiplyScalar(0.016));
+                Vec3.temp.copy(spark.userData.velocity).multiplyScalar(0.016);
+                spark.position.add(Vec3.temp);
                 spark.material.opacity = fadeOut;
                 spark.scale.setScalar(fadeOut);
             });
@@ -11141,7 +11146,8 @@ function createGroundSlamEffect(position, radius) {
                 return;
             }
             velocity.y -= 15 * 0.016;
-            debris.position.add(velocity.clone().multiplyScalar(0.016));
+            Vec3.temp.copy(velocity).multiplyScalar(0.016);
+            debris.position.add(Vec3.temp);
             debris.rotation.x += 0.2;
             debris.rotation.z += 0.15;
             if (debris.position.y < 0.15) {
@@ -11293,7 +11299,8 @@ function bossSummonMinions(boss) {
                 return;
             }
             velocity.y -= 5 * 0.016;
-            particle.position.add(velocity.clone().multiplyScalar(0.016));
+            Vec3.temp.copy(velocity).multiplyScalar(0.016);
+            particle.position.add(Vec3.temp);
             particle.material.opacity = 1 - elapsed / 0.8;
             requestAnimationFrame(animateParticle);
         }
