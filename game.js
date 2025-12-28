@@ -8611,6 +8611,15 @@ function reload() {
     const reloadDuration = stats.reloadTime;
     const startTime = Date.now();
 
+    // Show reload progress indicator
+    const reloadProgress = document.getElementById('reload-progress');
+    const reloadFill = reloadProgress ? reloadProgress.querySelector('.reload-fill') : null;
+    const reloadText = document.getElementById('reload-text');
+    if (reloadProgress) {
+        reloadProgress.style.display = 'block';
+        reloadProgress.classList.remove('complete');
+    }
+
     // Animation phases (as percentage of total time)
     const phases = {
         tiltDown: 0.15,      // 0-15%: Tilt weapon down
@@ -8624,8 +8633,27 @@ function reload() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / reloadDuration, 1);
 
+        // Update reload progress indicator
+        if (reloadFill) {
+            // Circle circumference = 2 * PI * r = 2 * 3.14159 * 26 = 163.36
+            const circumference = 163.36;
+            const dashOffset = circumference * (1 - progress);
+            reloadFill.style.strokeDashoffset = dashOffset;
+
+            // Change color based on progress: green -> yellow -> flash at end
+            if (progress > 0.9) {
+                reloadFill.style.stroke = '#ffff00';
+            } else {
+                reloadFill.style.stroke = '#00ff00';
+            }
+        }
+        if (reloadText) {
+            reloadText.textContent = Math.round(progress * 100) + '%';
+        }
+
         if (!weapon.model || !weapon.magazine) {
             weapon.isReloading = false;
+            if (reloadProgress) reloadProgress.style.display = 'none';
             return;
         }
 
@@ -8682,6 +8710,17 @@ function reload() {
             weapon.ammo += ammoToAdd;
             weapon.reserveAmmo -= ammoToAdd;
             weapon.isReloading = false;
+
+            // Hide reload progress indicator with completion flash
+            if (reloadProgress) {
+                reloadProgress.classList.add('complete');
+                if (reloadText) reloadText.textContent = 'READY';
+                setTimeout(() => {
+                    reloadProgress.style.display = 'none';
+                    reloadProgress.classList.remove('complete');
+                    if (reloadFill) reloadFill.style.strokeDashoffset = 163.36;
+                }, 200);
+            }
 
             DebugLog.log(`Reloaded! Ammo: ${weapon.ammo}/${weapon.reserveAmmo}`, 'success');
             updateHUD();
