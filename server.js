@@ -399,7 +399,9 @@ const mainServer = net.createServer((socket) => {
         }
     });
 
-    socket.on('error', () => {});
+    socket.on('error', (err) => {
+        log('Socket protocol detection error: ' + err.message, 'ERROR');
+    });
 });
 
 const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard.json');
