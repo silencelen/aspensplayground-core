@@ -1123,6 +1123,16 @@ const WeaponUpgrades = {
         laserGun: { damage: 0, fireRate: 0, magSize: 0, reloadTime: 0 }
     },
 
+    // Stat descriptions for tooltips
+    statDescriptions: {
+        damage: { name: 'Damage', desc: 'Increases damage dealt per hit. Higher damage kills zombies faster.', unit: '' },
+        fireRate: { name: 'Fire Rate', desc: 'Decreases time between shots. Fire faster to clear hordes quickly.', unit: 'ms', invert: true },
+        magSize: { name: 'Magazine Size', desc: 'Increases ammo capacity per magazine. Reload less often.', unit: ' rounds' },
+        reloadTime: { name: 'Reload Speed', desc: 'Decreases reload time. Get back in action faster.', unit: 'ms', invert: true },
+        pellets: { name: 'Pellets', desc: 'Increases pellets fired per shot. More pellets = more damage spread.', unit: '' },
+        splashRadius: { name: 'Splash Radius', desc: 'Increases explosion radius. Hit more zombies per rocket.', unit: ' units' }
+    },
+
     // Base costs for each weapon/upgrade
     costs: {
         pistol: { damage: 100, fireRate: 100, magSize: 150, reloadTime: 100 },
@@ -1329,6 +1339,11 @@ const WeaponUpgrades = {
                     btn.disabled = playerState.score < cost;
                     btn.classList.remove('maxed');
                 }
+
+                // Update tooltip for this row
+                const existingTooltip = row.querySelector('.upgrade-tooltip');
+                if (existingTooltip) existingTooltip.remove();
+                row.insertAdjacentHTML('beforeend', this.createTooltipHTML(weaponName, stat));
             });
         });
     },
@@ -1342,8 +1357,82 @@ const WeaponUpgrades = {
         }
     },
 
+    // Get base stat value for a weapon
+    getBaseStat(weapon, stat) {
+        const base = WEAPONS[weapon];
+        if (!base) return 0;
+        if (stat === 'damage') return base.damage;
+        if (stat === 'fireRate') return base.fireRate;
+        if (stat === 'magSize') return base.magSize;
+        if (stat === 'reloadTime') return base.reloadTime;
+        if (stat === 'pellets') return base.pellets || 0;
+        if (stat === 'splashRadius') return base.splashRadius || 0;
+        return 0;
+    },
+
+    // Create tooltip HTML for an upgrade row
+    createTooltipHTML(weapon, stat) {
+        const desc = this.statDescriptions[stat];
+        if (!desc) return '';
+
+        const level = this.levels[weapon][stat];
+        const baseStat = this.getBaseStat(weapon, stat);
+        const currentValue = this.getModifiedStat(weapon, stat, baseStat);
+        const cost = this.getCost(weapon, stat);
+        const isMaxed = level >= this.maxLevel;
+
+        let nextValue = currentValue;
+        if (!isMaxed) {
+            const nextMultiplier = this.multipliers[stat]?.[level + 1] ?? 1;
+            nextValue = Math.round(baseStat * nextMultiplier);
+        }
+
+        // For inverted stats (lower is better), show improvement direction
+        const improves = desc.invert ? nextValue < currentValue : nextValue > currentValue;
+
+        let statsHTML = '';
+        if (isMaxed) {
+            statsHTML = `<div class="tooltip-maxed">✓ MAXED OUT</div>`;
+        } else {
+            statsHTML = `
+                <div class="tooltip-stats">
+                    <span class="tooltip-current">${currentValue}${desc.unit}</span>
+                    <span class="tooltip-arrow">→</span>
+                    <span class="tooltip-next">${nextValue}${desc.unit}</span>
+                </div>
+                <div class="tooltip-cost">Cost: ${cost} points</div>
+            `;
+        }
+
+        return `
+            <div class="upgrade-tooltip">
+                <div class="tooltip-title">${desc.name}</div>
+                <div class="tooltip-desc">${desc.desc}</div>
+                ${statsHTML}
+            </div>
+        `;
+    },
+
+    // Generate tooltips for all upgrade rows
+    generateTooltips() {
+        document.querySelectorAll('.weapon-upgrade-card').forEach(card => {
+            const weapon = card.dataset.weapon;
+            card.querySelectorAll('.upgrade-row').forEach(row => {
+                const stat = row.dataset.upgrade;
+                // Remove existing tooltip if any
+                const existing = row.querySelector('.upgrade-tooltip');
+                if (existing) existing.remove();
+                // Add new tooltip
+                row.insertAdjacentHTML('beforeend', this.createTooltipHTML(weapon, stat));
+            });
+        });
+    },
+
     // Initialize shop event listeners
     init() {
+        // Generate tooltips
+        this.generateTooltips();
+
         // Upgrade button clicks
         document.querySelectorAll('.upgrade-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {

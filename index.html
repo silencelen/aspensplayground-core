@@ -1212,6 +1212,104 @@
             box-shadow: 0 0 15px rgba(74, 74, 255, 0.5);
         }
 
+        /* Upgrade Tooltips */
+        .upgrade-row {
+            position: relative;
+        }
+
+        .upgrade-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%);
+            background: rgba(20, 20, 30, 0.98);
+            border: 2px solid #ffd700;
+            border-radius: 8px;
+            padding: 10px 14px;
+            min-width: 180px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            -webkit-transition: opacity 0.2s, visibility 0.2s;
+            transition: opacity 0.2s, visibility 0.2s;
+            pointer-events: none;
+            margin-bottom: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .upgrade-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%);
+            border: 8px solid transparent;
+            border-top-color: #ffd700;
+        }
+
+        .upgrade-row:hover .upgrade-tooltip,
+        .upgrade-row:focus-within .upgrade-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .tooltip-title {
+            color: #ffd700;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 4px;
+        }
+
+        .tooltip-desc {
+            color: #aaa;
+            font-size: 11px;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .tooltip-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .tooltip-current {
+            color: #888;
+            font-size: 12px;
+        }
+
+        .tooltip-arrow {
+            color: #00ff00;
+            font-size: 14px;
+        }
+
+        .tooltip-next {
+            color: #00ff00;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .tooltip-cost {
+            color: #ff6600;
+            font-size: 11px;
+            margin-top: 6px;
+            text-align: center;
+            border-top: 1px solid #444;
+            padding-top: 6px;
+        }
+
+        .tooltip-maxed {
+            color: #ffd700;
+            font-size: 12px;
+            text-align: center;
+            font-weight: bold;
+        }
+
         #shop-continue-btn:focus,
         #shop-continue-btn:focus-visible {
             outline: 2px solid #ffff00;
