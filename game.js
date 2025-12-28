@@ -13065,6 +13065,48 @@ function initEventListeners() {
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+
+    // Page Visibility API - pause when tab/app is hidden
+    let wasRunningBeforeHidden = false;
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            // Page is now hidden (user switched tabs/apps)
+            if (GameState.isRunning && !GameState.isPaused && !GameState.isGameOver) {
+                wasRunningBeforeHidden = true;
+                GameState.isPaused = true;
+                setElementDisplay('pause-screen', 'flex');
+                
+                // Suspend audio context to save resources
+                if (audioContext && audioContext.state === 'running') {
+                    audioContext.suspend();
+                }
+                
+                DebugLog.log('Game paused - page hidden', 'info');
+            }
+        } else {
+            // Page is now visible again
+            if (wasRunningBeforeHidden && GameState.isPaused) {
+                // Don't auto-resume - let user click to resume
+                // But do resume audio context
+                if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                DebugLog.log('Page visible - click to resume', 'info');
+            }
+            wasRunningBeforeHidden = false;
+        }
+    });
+
+    // Also handle window blur/focus for desktop
+    window.addEventListener('blur', () => {
+        if (GameState.isRunning && !GameState.isPaused && !GameState.isGameOver && !isMobile) {
+            // On desktop, pause when window loses focus (optional behavior)
+            // Uncomment below to enable:
+            // GameState.isPaused = true;
+            // setElementDisplay('pause-screen', 'flex');
+        }
+    });
+
     DebugLog.log('Event listeners initialized', 'success');
 }
 
