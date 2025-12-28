@@ -998,7 +998,123 @@ app.post('/api/leaderboard', (req, res) => {
 // Load leaderboard on startup
 loadLeaderboard();
 
+// ==================== HEALTH & METRICS ENDPOINTS ====================
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/api/status', (req, res) => {
+    const uptime = process.uptime();
+    const memoryUsage = process.memoryUsage();
+
+    // Count active rooms and players
+    let totalPlayers = 0;
+    let activeRooms = 0;
+    if (typeof rooms !== 'undefined') {
+        rooms.forEach((room, roomId) => {
+            if (room.players && room.players.size > 0) {
+                activeRooms++;
+                totalPlayers += room.players.size;
+            }
+        });
+    }
+
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: {
+            seconds: Math.floor(uptime),
+            formatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`
+        },
+        memory: {
+            heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + ' MB',
+            heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + ' MB',
+            rss: Math.round(memoryUsage.rss / 1024 / 1024) + ' MB'
+        },
+        game: {
+            activeRooms: activeRooms,
+            totalPlayers: totalPlayers,
+            bannedIPs: ipBans.size
+        },
+        version: '1.0.0'
+    });
+});
+
+app.get('/api/metrics', (req, res) => {
+    const uptime = process.uptime();
+    const memoryUsage = process.memoryUsage();
+
+    let totalPlayers = 0;
+    let activeRooms = 0;
+    if (typeof rooms !== 'undefined') {
+        rooms.forEach((room) => {
+            if (room.players && room.players.size > 0) {
+                activeRooms++;
+                totalPlayers += room.players.size;
+            }
+        });
+    }
+
+    // Prometheus-style metrics
+    const metrics = [
+        `# HELP aspen_uptime_seconds Server uptime in seconds`,
+        `# TYPE aspen_uptime_seconds gauge`,
+        `aspen_uptime_seconds ${Math.floor(uptime)}`,
+        ``,
+        `# HELP aspen_memory_heap_used_bytes Heap memory used`,
+        `# TYPE aspen_memory_heap_used_bytes gauge`,
+        `aspen_memory_heap_used_bytes ${memoryUsage.heapUsed}`,
+        ``,
+        `# HELP aspen_memory_heap_total_bytes Total heap memory`,
+        `# TYPE aspen_memory_heap_total_bytes gauge`,
+        `aspen_memory_heap_total_bytes ${memoryUsage.heapTotal}`,
+        ``,
+        `# HELP aspen_active_rooms Number of active game rooms`,
+        `# TYPE aspen_active_rooms gauge`,
+        `aspen_active_rooms ${activeRooms}`,
+        ``,
+        `# HELP aspen_total_players Total connected players`,
+        `# TYPE aspen_total_players gauge`,
+        `aspen_total_players ${totalPlayers}`,
+        ``,
+        `# HELP aspen_banned_ips Number of banned IPs`,
+        `# TYPE aspen_banned_ips gauge`,
+        `aspen_banned_ips ${ipBans.size}`,
+    ].join('\n');
+
+    res.set('Content-Type', 'text/plain');
+    res.send(metrics);
+});
+
 // ==================== LOGGING ====================
+const LOG_DIR = path.join(__dirname, 'logs');
+const LOG_FILE = path.join(LOG_DIR, 'server.log');
+const ERROR_LOG_FILE = path.join(LOG_DIR, 'error.log');
+const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB max log file size
+
+// Ensure logs directory exists
+if (!fs.existsSync(LOG_DIR)) {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+// Rotate log file if too large
+function rotateLogIfNeeded(logFile) {
+    try {
+        if (fs.existsSync(logFile)) {
+            const stats = fs.statSync(logFile);
+            if (stats.size > MAX_LOG_SIZE) {
+                const rotatedFile = logFile.replace('.log', `-${Date.now()}.log`);
+                fs.renameSync(logFile, rotatedFile);
+            }
+        }
+    } catch (err) {
+        console.error('Log rotation error:', err.message);
+    }
+}
+
 function log(message, type = 'INFO') {
     const timestamp = new Date().toISOString();
     const colors = {
@@ -1007,11 +1123,69 @@ function log(message, type = 'INFO') {
         'ERROR': '\x1b[31m',
         'SUCCESS': '\x1b[32m',
         'GAME': '\x1b[35m',
-        'PLAYER': '\x1b[34m'
+        'PLAYER': '\x1b[34m',
+        'DEBUG': '\x1b[90m',
+        'FATAL': '\x1b[41m\x1b[37m'
     };
     const reset = '\x1b[0m';
+
+    // Console output with colors
     console.log(`${colors[type] || ''}[${timestamp}] [${type}] ${message}${reset}`);
+
+    // File output (plain text)
+    const logLine = `[${timestamp}] [${type}] ${message}\n`;
+    try {
+        rotateLogIfNeeded(LOG_FILE);
+        fs.appendFileSync(LOG_FILE, logLine);
+
+        // Also write errors to separate error log
+        if (type === 'ERROR' || type === 'FATAL') {
+            rotateLogIfNeeded(ERROR_LOG_FILE);
+            fs.appendFileSync(ERROR_LOG_FILE, logLine);
+        }
+    } catch (err) {
+        // Silently fail file logging to avoid crashing server
+    }
 }
+
+// Structured JSON logging for external services
+function logJSON(message, type = 'INFO', metadata = {}) {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        level: type,
+        message: message,
+        service: 'aspen-playground-server',
+        ...metadata
+    };
+    log(JSON.stringify(logEntry), type);
+}
+
+// ==================== GLOBAL ERROR HANDLERS ====================
+let serverStartTime = Date.now();
+
+process.on('uncaughtException', (error) => {
+    log(`FATAL: Uncaught exception: ${error.message}`, 'FATAL');
+    log(`Stack: ${error.stack}`, 'FATAL');
+    // Give time to flush logs before exiting
+    setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    log(`ERROR: Unhandled promise rejection: ${reason}`, 'ERROR');
+    if (reason instanceof Error) {
+        log(`Stack: ${reason.stack}`, 'ERROR');
+    }
+});
+
+process.on('SIGTERM', () => {
+    log('Received SIGTERM signal, shutting down gracefully...', 'WARN');
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    log('Received SIGINT signal, shutting down gracefully...', 'WARN');
+    process.exit(0);
+});
 
 // ==================== NAVIGATION GRID ====================
 const NavGrid = {

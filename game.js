@@ -13800,6 +13800,21 @@ const AgeGate = {
     }
 };
 
+// ==================== GLOBAL ERROR HANDLERS ====================
+// Catch uncaught errors
+window.addEventListener('error', (event) => {
+    const errorInfo = `${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
+    DebugLog.log(`Uncaught error: ${errorInfo}`, 'error');
+    console.error('Uncaught error:', event.error);
+});
+
+// Catch unhandled promise rejections
+window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason instanceof Error ? event.reason.message : String(event.reason);
+    DebugLog.log(`Unhandled promise rejection: ${reason}`, 'error');
+    console.error('Unhandled rejection:', event.reason);
+});
+
 // ==================== INITIALIZE ====================
 window.addEventListener('load', () => {
     DebugLog.log('Window loaded, starting initialization...', 'info');
