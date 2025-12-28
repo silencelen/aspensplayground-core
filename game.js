@@ -910,7 +910,7 @@ const WEAPONS = {
     },
     laserGun: {
         name: 'Laser Gun',
-        damage: 8,          // Damage per tick
+        damage: 25,         // Damage per tick (increased from 8)
         fireRate: 50,       // Rapid fire beam
         magSize: 100,       // Energy units
         reserveMax: 200,
