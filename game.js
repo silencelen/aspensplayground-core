@@ -4034,10 +4034,15 @@ function handleGameStart(message) {
     cleanupCosmeticPreviews();
 
     // Check WebGL context
-    if (renderer.getContext().isContextLost()) {
+    if (renderer && renderer.getContext() && renderer.getContext().isContextLost()) {
         console.error('WebGL context was lost!');
-        // Try to restore
-        renderer.forceContextRestore();
+        try {
+            renderer.forceContextRestore();
+            DebugLog.log('WebGL context restored', 'success');
+        } catch (e) {
+            DebugLog.log('Failed to restore WebGL context - please refresh the page', 'error');
+            console.error('WebGL restore failed:', e);
+        }
     }
 
     // Initialize optimization systems
