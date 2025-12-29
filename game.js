@@ -3850,11 +3850,11 @@ function decodeBinarySync(view) {
                 zombie.isAlive = isAlive;
                 zombie.type = ZombieTypes[typeCode] || 'normal';
 
-                // Update mesh position
+                // Use interpolation system instead of snapping position (prevents rubberbanding)
+                Interpolation.updateEntity(zombie, { x, z }, rotation);
+
+                // Update visibility only - position handled by interpolation in render loop
                 if (zombie.mesh) {
-                    zombie.mesh.position.x = x;
-                    zombie.mesh.position.z = z;
-                    zombie.mesh.rotation.y = rotation;
                     zombie.mesh.visible = isAlive;
                 }
             }
