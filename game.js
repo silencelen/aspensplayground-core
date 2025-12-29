@@ -1830,8 +1830,12 @@ let cachedLeaderboard = [];
 let playerRank = -1;
 
 async function fetchLeaderboard() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
     try {
-        const response = await fetch('/api/leaderboard');
+        const response = await fetch('/api/leaderboard', { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (response.ok) {
             const data = await response.json();
             if (Array.isArray(data)) {
@@ -1843,7 +1847,12 @@ async function fetchLeaderboard() {
             }
         }
     } catch (e) {
-        DebugLog.log(`Failed to fetch leaderboard: ${e.message}`, 'error');
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+            DebugLog.log('Leaderboard fetch timed out', 'warn');
+        } else {
+            DebugLog.log(`Failed to fetch leaderboard: ${e.message}`, 'error');
+        }
     }
     return cachedLeaderboard;
 }
@@ -1856,12 +1865,17 @@ async function submitScore(name) {
         return { added: false, rank: -1, leaderboard: cachedLeaderboard };
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
     try {
         const response = await fetch('/api/leaderboard', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, sessionToken })
+            body: JSON.stringify({ name, sessionToken }),
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         if (response.ok) {
             const result = await response.json();
@@ -1885,7 +1899,12 @@ async function submitScore(name) {
             }
         }
     } catch (e) {
-        DebugLog.log(`Failed to submit score: ${e.message}`, 'error');
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+            DebugLog.log('Score submission timed out', 'warn');
+        } else {
+            DebugLog.log(`Failed to submit score: ${e.message}`, 'error');
+        }
     }
     return { added: false, rank: -1, leaderboard: cachedLeaderboard };
 }
@@ -2186,7 +2205,9 @@ function initAchievementsScreen() {
 
 function updateCosmeticSelection() {
     document.querySelectorAll('.cosmetic-option').forEach(option => {
-        option.classList.toggle('selected', option.dataset.cosmetic === selectedCosmetic);
+        const isSelected = option.dataset.cosmetic === selectedCosmetic;
+        option.classList.toggle('selected', isSelected);
+        option.setAttribute('aria-selected', isSelected.toString());
     });
 }
 
@@ -2458,6 +2479,7 @@ function registerServiceWorker() {
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                                 DebugLog.log('New version available! Refresh to update.', 'info');
+                                showUpdateNotification();
                             }
                         });
                     });
@@ -2465,8 +2487,33 @@ function registerServiceWorker() {
                 .catch((error) => {
                     DebugLog.log('ServiceWorker registration failed: ' + error, 'error');
                 });
+
+            // Listen for service worker update messages
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'SW_UPDATED') {
+                    DebugLog.log(`Game updated to version ${event.data.version}`, 'success');
+                }
+            });
         });
     }
+}
+
+// Show update notification to user
+function showUpdateNotification() {
+    // Only show if we're not in the middle of a game
+    if (GameState.isRunning) return;
+
+    const notification = document.createElement('div');
+    notification.id = 'update-notification';
+    notification.innerHTML = `
+        <div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#2d4a2d,#1a3a1a);border:2px solid #4a7a4a;padding:15px 25px;border-radius:10px;color:#fff;font-family:Arial,sans-serif;z-index:10000;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+            <div style="font-weight:bold;margin-bottom:5px;">Update Available!</div>
+            <div style="font-size:14px;color:#aaa;margin-bottom:10px;">A new version of the game is ready.</div>
+            <button onclick="location.reload()" style="background:#4a7a4a;border:none;color:#fff;padding:8px 20px;border-radius:5px;cursor:pointer;font-weight:bold;">Refresh Now</button>
+            <button onclick="this.parentElement.parentElement.remove()" style="background:transparent;border:1px solid #666;color:#aaa;padding:8px 15px;border-radius:5px;cursor:pointer;margin-left:10px;">Later</button>
+        </div>
+    `;
+    document.body.appendChild(notification);
 }
 
 // Register service worker immediately
@@ -8363,6 +8410,13 @@ function initMobileControls() {
     shootBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
         hapticFeedback(HAPTIC.TAP);
+
+        // Clear any existing interval to prevent orphaned intervals
+        if (shootInterval) {
+            clearInterval(shootInterval);
+            shootInterval = null;
+        }
+
         const touch = e.changedTouches[0];
         mobileInput.shooting = true;
         shootBtn.classList.add('firing');

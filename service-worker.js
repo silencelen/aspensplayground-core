@@ -1,5 +1,7 @@
 // Service Worker for Aspen's Playground PWA
-const CACHE_NAME = 'aspens-playground-v2';
+// Update this version when deploying significant changes
+const CACHE_VERSION = 3;
+const CACHE_NAME = `aspens-playground-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
 // Assets to cache on install
@@ -42,23 +44,33 @@ self.addEventListener('install', (event) => {
     );
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and notify clients
 self.addEventListener('activate', (event) => {
     console.log('[ServiceWorker] Activating...');
     event.waitUntil(
         caches.keys()
             .then((cacheNames) => {
+                const oldCaches = cacheNames.filter(name => name !== CACHE_NAME);
+                if (oldCaches.length > 0) {
+                    console.log('[ServiceWorker] Cleaning old caches:', oldCaches);
+                }
                 return Promise.all(
-                    cacheNames.map((cacheName) => {
-                        if (cacheName !== CACHE_NAME) {
-                            console.log('[ServiceWorker] Deleting old cache:', cacheName);
-                            return caches.delete(cacheName);
-                        }
+                    oldCaches.map((cacheName) => {
+                        console.log('[ServiceWorker] Deleting old cache:', cacheName);
+                        return caches.delete(cacheName);
                     })
                 );
             })
             .then(() => {
                 console.log('[ServiceWorker] Activate complete');
+                // Notify all clients that a new version is available
+                return self.clients.matchAll().then(clients => {
+                    clients.forEach(client => {
+                        client.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION });
+                    });
+                });
+            })
+            .then(() => {
                 return self.clients.claim();
             })
     );

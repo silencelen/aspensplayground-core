@@ -110,7 +110,11 @@ class MinHeap {
 
     _bubbleDown(idx) {
         const length = this.heap.length;
-        while (true) {
+        // Safety limit: heap depth is at most log2(length), but add buffer
+        const maxIterations = Math.max(length, 100);
+        let iterations = 0;
+
+        while (iterations++ < maxIterations) {
             const leftIdx = 2 * idx + 1;
             const rightIdx = 2 * idx + 2;
             let smallest = idx;
@@ -1453,7 +1457,11 @@ const Pathfinder = {
         let x = gx1;
         let z = gz1;
 
-        while (true) {
+        // Safety limit: max iterations is the manhattan distance plus buffer
+        const maxIterations = dx + dz + 10;
+        let iterations = 0;
+
+        while (iterations++ < maxIterations) {
             if (!NavGrid.isWalkable(x, z)) {
                 return false;
             }
@@ -3200,7 +3208,13 @@ function handleMessage(playerId, message) {
 
         case 'ping':
             // Respond to ping with pong for latency tracking
-            safeSend(ws, JSON.stringify({ type: 'pong', timestamp: message.timestamp }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({ type: 'pong', timestamp: message.timestamp }));
+                } catch (e) {
+                    log(`Pong send error: ${e.message}`, 'ERROR');
+                }
+            }
             break;
 
         default:
