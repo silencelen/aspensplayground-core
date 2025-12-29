@@ -10754,15 +10754,19 @@ function togglePause() {
         document.exitPointerLock();
         // In singleplayer, actually pause the game (stop spawn timer)
         if (GameState.mode === 'singleplayer' && GameState.spawnTimer) {
-            GameState.pausedSpawnTimer = GameState.spawnTimer;
-            clearInterval(GameState.spawnTimer);
+            clearTimeout(GameState.spawnTimer);
             GameState.spawnTimer = null;
+            GameState.spawnWasPaused = true;
         }
     } else {
-        // Resume spawn timer in singleplayer if it was paused
-        if (GameState.mode === 'singleplayer' && GameState.pausedSpawnTimer) {
-            // Timer will restart on next wave or we continue spawning
-            GameState.pausedSpawnTimer = null;
+        // Resume spawning in singleplayer if it was paused mid-spawn
+        if (GameState.mode === 'singleplayer' && GameState.spawnWasPaused) {
+            GameState.spawnWasPaused = false;
+            // If there are still zombies to spawn, restart the spawn chain
+            if (GameState.zombiesToSpawn > 0 && GameState.isRunning) {
+                const spawnInterval = WaveSystem.getSpawnInterval(GameState.wave);
+                spawnNextZombie(GameState.zombiesToSpawn, spawnInterval);
+            }
         }
     }
 }
@@ -11732,9 +11736,12 @@ async function startSinglePlayerWave() {
     }
 }
 
-// Recursive spawn function - doesn't check isPaused, just isRunning
+// Recursive spawn function - respects pause state in singleplayer
 function spawnNextZombie(totalCount, interval) {
     if (!GameState.isRunning || GameState.isGameOver) return;
+
+    // Don't spawn while paused - will be resumed by togglePause
+    if (GameState.isPaused) return;
 
     if (GameState.zombiesToSpawn > 0) {
         spawnSinglePlayerZombie();
@@ -13830,6 +13837,7 @@ async function quitToMenu() {
     GameState.zombiesRemaining = 0;
     GameState.zombiesSpawned = 0;
     GameState.zombiesToSpawn = 0;
+    GameState.spawnWasPaused = false;
     GameState.mode = null;
     GameState.isInLobby = false;
     GameState.isReady = false;
