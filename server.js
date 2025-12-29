@@ -1798,7 +1798,7 @@ const CONFIG = {
         rocketLauncher: { damage: 250, splashDamage: 150, headshotMultiplier: 1 },
         laserGun: { damage: 25, headshotMultiplier: 1.5 }
     },
-    tickRate: 10 // Server updates per second (reduced from 20 for less lag)
+    tickRate: 20 // Server updates per second (reduced from 20 for less lag)
 };
 
 // Valid weapon names for validation
@@ -2281,7 +2281,7 @@ function damagePlayer(playerId, damage) {
     } else {
         // Send damage update to specific player
         const ws = player.ws;
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (player.ws && player.ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'playerDamaged',
                 health: player.health,
@@ -3208,9 +3208,9 @@ function handleMessage(playerId, message) {
 
         case 'ping':
             // Respond to ping with pong for latency tracking
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (player.ws && player.ws.readyState === WebSocket.OPEN) {
                 try {
-                    ws.send(JSON.stringify({ type: 'pong', timestamp: message.timestamp }));
+                    player.ws.send(JSON.stringify({ type: 'pong', timestamp: message.timestamp }));
                 } catch (e) {
                     log(`Pong send error: ${e.message}`, 'ERROR');
                 }
@@ -3298,9 +3298,10 @@ const BinaryProtocol = {
         buffer.writeUInt32LE(0, offset); offset += 4; // reserved
 
         // Zombies: each 20 bytes
-        zombieArray.forEach((zombie, idx) => {
-            // ID as index (2 bytes) - client maps by received order
-            buffer.writeUInt16LE(idx, offset); offset += 2;
+        zombieArray.forEach((zombie) => {
+            // Extract numeric ID from zombie.id (e.g., "zombie_5" -> 5)
+            const idNum = parseInt(zombie.id?.split('_')[1] || '0', 10);
+            buffer.writeUInt16LE(idNum, offset); offset += 2;
             // Type encoded (1 byte): 0=normal, 1=runner, 2=tank, 3=boss
             const typeCode = { normal: 0, runner: 1, tank: 2, boss: 3 }[zombie.type] || 0;
             buffer.writeUInt8(typeCode, offset); offset += 1;

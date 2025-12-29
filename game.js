@@ -3825,8 +3825,8 @@ function decodeBinarySync(view) {
     GameState.totalKills = totalKills;
     GameState.totalScore = totalScore;
 
-    // Create zombie ID mapping for this sync
-    const zombieIds = Array.from(zombies.keys());
+    // Server sends actual zombie ID numbers now
+    // No need for ID mapping - server sends actual zombie IDs
 
     // Decode zombies
     for (let i = 0; i < zombieCount; i++) {
@@ -3839,7 +3839,7 @@ function decodeBinarySync(view) {
         const health = view.getUint16(offset, true); offset += 2;
 
         // Find matching zombie by index or create position reference
-        const zombieId = zombieIds[idx];
+        const zombieId = `zombie_${idx}`;
         if (zombieId) {
             const zombie = zombies.get(zombieId);
             if (zombie) {
@@ -3850,11 +3850,15 @@ function decodeBinarySync(view) {
                 zombie.isAlive = isAlive;
                 zombie.type = ZombieTypes[typeCode] || 'normal';
 
+                // Update interpolation targets (used by render loop)
+                zombie.targetPosition = { x: x, z: z };
+                zombie.targetRotation = rotation;
+
                 // Update mesh position
                 if (zombie.mesh) {
-                    zombie.mesh.position.x = x;
-                    zombie.mesh.position.z = z;
-                    zombie.mesh.rotation.y = rotation;
+                    // Let interpolation handle position - zombie.mesh.position.x = x;
+                    // zombie.mesh.position.z = z;
+                    // zombie.mesh.rotation.y = rotation;
                     zombie.mesh.visible = isAlive;
                 }
             }

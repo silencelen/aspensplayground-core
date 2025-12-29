@@ -263,8 +263,8 @@ const DeltaCompression = {
 
 // ==================== CLIENT-SIDE INTERPOLATION ====================
 const Interpolation = {
-    lerpFactor: 0.15,
-    rotLerpFactor: 0.2,
+    lerpFactor: 0.25,
+    rotLerpFactor: 0.3,
 
     lerp(current, target, factor) {
         return current + (target - current) * factor;
