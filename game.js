@@ -4577,9 +4577,6 @@ function handleWaveComplete(message) {
 function handleGameStart(message) {
     DebugLog.log('Game starting!', 'game');
 
-    // Re-initialize controls (may have been cleaned up on previous quit)
-    initControls();
-
     // Clean up any cosmetic preview renderers that might be stealing WebGL context
     cleanupCosmeticPreviews();
 
@@ -10757,19 +10754,15 @@ function togglePause() {
         document.exitPointerLock();
         // In singleplayer, actually pause the game (stop spawn timer)
         if (GameState.mode === 'singleplayer' && GameState.spawnTimer) {
-            clearTimeout(GameState.spawnTimer);
+            GameState.pausedSpawnTimer = GameState.spawnTimer;
+            clearInterval(GameState.spawnTimer);
             GameState.spawnTimer = null;
-            GameState.spawnWasPaused = true;
         }
     } else {
-        // Resume spawning in singleplayer if it was paused mid-spawn
-        if (GameState.mode === 'singleplayer' && GameState.spawnWasPaused) {
-            GameState.spawnWasPaused = false;
-            // If there are still zombies to spawn, restart the spawn chain
-            if (GameState.zombiesToSpawn > 0 && GameState.isRunning) {
-                const spawnInterval = WaveSystem.getSpawnInterval(GameState.wave);
-                spawnNextZombie(GameState.zombiesToSpawn, spawnInterval);
-            }
+        // Resume spawn timer in singleplayer if it was paused
+        if (GameState.mode === 'singleplayer' && GameState.pausedSpawnTimer) {
+            // Timer will restart on next wave or we continue spawning
+            GameState.pausedSpawnTimer = null;
         }
     }
 }
@@ -11375,9 +11368,6 @@ function updateEffects(delta) {
 function startSinglePlayerGame() {
     DebugLog.log('Starting Single Player mode...', 'game');
 
-    // Re-initialize controls (may have been cleaned up on previous quit)
-    initControls();
-
     // Hide menu, show game UI
     setElementDisplay('start-screen', 'none');
     setElementDisplay('hud', 'flex');
@@ -11742,12 +11732,9 @@ async function startSinglePlayerWave() {
     }
 }
 
-// Recursive spawn function - respects pause state in singleplayer
+// Recursive spawn function - doesn't check isPaused, just isRunning
 function spawnNextZombie(totalCount, interval) {
     if (!GameState.isRunning || GameState.isGameOver) return;
-
-    // Don't spawn while paused - will be resumed by togglePause
-    if (GameState.isPaused) return;
 
     if (GameState.zombiesToSpawn > 0) {
         spawnSinglePlayerZombie();
@@ -13843,7 +13830,6 @@ async function quitToMenu() {
     GameState.zombiesRemaining = 0;
     GameState.zombiesSpawned = 0;
     GameState.zombiesToSpawn = 0;
-    GameState.spawnWasPaused = false;
     GameState.mode = null;
     GameState.isInLobby = false;
     GameState.isReady = false;
