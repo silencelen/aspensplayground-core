@@ -3850,11 +3850,14 @@ function decodeBinarySync(view) {
                 zombie.isAlive = isAlive;
                 zombie.type = ZombieTypes[typeCode] || 'normal';
 
-                // Use interpolation system instead of snapping position (prevents rubberbanding)
-                Interpolation.updateEntity(zombie, { x, z }, rotation);
+                // Directly update mesh position from server data
+                // (lerp factor chase effect made zombies lag behind)
 
-                // Update visibility only - position handled by interpolation in render loop
+                // Update mesh position and visibility directly
                 if (zombie.mesh) {
+                    zombie.mesh.position.x = x;
+                    zombie.mesh.position.z = z;
+                    zombie.mesh.rotation.y = rotation;
                     zombie.mesh.visible = isAlive;
                 }
             }
@@ -5790,7 +5793,7 @@ const ZombieSkeleton = {
         }
 
         // Apply rotation to face direction
-        // In multiplayer, interpolation handles rotation smoothly via applyInterpolation()
+        // In multiplayer, binary sync sets rotation directly
         if (zombie.rotation !== undefined && GameState.mode === 'singleplayer') {
             zombie.mesh.rotation.y = zombie.rotation;
         }
@@ -11142,10 +11145,10 @@ function updateZombieAnimations(delta) {
     zombies.forEach(zombie => {
         if (!zombie.mesh) return;
 
-        // Apply smooth interpolation instead of snapping position
-        if (GameState.mode === 'multiplayer') {
-            Interpolation.applyInterpolation(zombie, zombie.mesh);
-        } else if (zombie.isAlive) {
+        // Sync mesh position from zombie data
+        // In multiplayer, binary sync already sets mesh position directly
+        // In singleplayer, collision system updates zombie.position and we sync here
+        if (GameState.mode === 'singleplayer' && zombie.isAlive) {
             // Singleplayer: direct position update (collision system handles mesh sync now)
             zombie.mesh.position.x = zombie.position.x;
             zombie.mesh.position.z = zombie.position.z;
