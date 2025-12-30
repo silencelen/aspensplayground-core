@@ -990,66 +990,99 @@
             margin: 20px 0;
         }
 
+                /* Game Over Screen Layout */
+        .gameover-header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .gameover-header .menu-title {
+            margin-bottom: 5px;
+        }
+
+        .gameover-content {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .gameover-stats-column {
+            flex: 1;
+            max-width: 320px;
+        }
+
+        .gameover-leaderboard-column {
+            flex: 1;
+            max-width: 280px;
+        }
+
+        .gameover-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .gameover-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .gameover-buttons .menu-button {
+            min-width: 120px;
+            padding: 10px 20px;
+        }
+
         /* Statistics Dashboard */
         #stats-dashboard {
             background: rgba(0, 0, 0, 0.6);
             border: 2px solid #444;
             border-radius: 10px;
-            padding: 15px;
-            margin: 15px 0;
-            max-width: 500px;
+            padding: 10px;
         }
 
-        .stats-row {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .stats-row:last-child {
-            margin-bottom: 0;
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
         }
 
         .stat-card {
             background: linear-gradient(180deg, rgba(40, 40, 40, 0.9), rgba(20, 20, 20, 0.9));
             border: 1px solid #555;
-            border-radius: 8px;
-            padding: 10px 15px;
+            border-radius: 6px;
+            padding: 8px 5px;
             text-align: center;
-            min-width: 90px;
-            transition: transform 0.2s, border-color 0.2s;
+            transition: border-color 0.2s;
         }
 
         .stat-card:hover {
-            -webkit-transform: translateY(-2px);
-            transform: translateY(-2px);
             border-color: #aaa;
         }
 
-        .stat-card.wide {
-            min-width: 140px;
-        }
-
-        .stat-icon {
-            font-size: 20px;
-            margin-bottom: 5px;
-        }
-
         .stat-value {
-            font-size: 22px;
+            font-size: 16px;
             font-weight: bold;
             color: #fff;
             text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .stat-label {
-            font-size: 10px;
+            font-size: 9px;
             color: #aaa;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-top: 3px;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
         }
+
 
         /* Leaderboard styles */
         .leaderboard-container {
@@ -1062,6 +1095,52 @@
             max-height: 400px;
             overflow-y: auto;
         }
+
+        /* Game Over Leaderboard (compact) */
+        #gameover-leaderboard {
+            padding: 10px 15px;
+            margin: 0;
+            min-width: auto;
+            max-height: 250px;
+        }
+
+        #gameover-leaderboard .leaderboard-title {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        #gameover-leaderboard .leaderboard-table td {
+            font-size: 12px;
+            padding: 4px 8px;
+        }
+
+        #gameover-leaderboard .leaderboard-table th {
+            font-size: 10px;
+            padding: 3px 8px;
+        }
+
+        /* Compact share buttons */
+        .share-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .share-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .share-btn.twitter { background: #1da1f2; color: #fff; }
+        .share-btn.reddit { background: #ff4500; color: #fff; }
+        .share-btn.copy { background: #666; color: #fff; }
+
+        .share-btn:hover { opacity: 0.9; }
+        .share-btn:focus { outline: 2px solid #ffcc00; outline-offset: 2px; }
 
         .leaderboard-title {
             font-size: 24px;
@@ -2734,83 +2813,78 @@
         </div>
     </div>
 
-    <div id="game-over-screen" role="dialog" aria-labelledby="gameover-title" aria-modal="true">
-        <h2 class="menu-title" id="gameover-title">GAME OVER</h2>
-        <div class="menu-subtitle">The zombies got you!</div>
-        <div id="final-score">Score: 0</div>
+        <div id="game-over-screen" role="dialog" aria-labelledby="gameover-title" aria-modal="true">
+        <div class="gameover-header">
+            <h2 class="menu-title" id="gameover-title">GAME OVER</h2>
+            <div id="final-score">Score: 0</div>
+        </div>
 
-        <!-- Statistics Dashboard -->
-        <div id="stats-dashboard">
-            <div class="stats-row">
-                <div class="stat-card">
-                    <div class="stat-icon">&#x1F3AF;</div>
-                    <div class="stat-value" id="stat-accuracy">0%</div>
-                    <div class="stat-label">Accuracy</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">&#x1F480;</div>
-                    <div class="stat-value" id="stat-kills">0</div>
-                    <div class="stat-label">Kills</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">&#x1F3C6;</div>
-                    <div class="stat-value" id="stat-headshots">0</div>
-                    <div class="stat-label">Headshots</div>
+        <!-- Main content area - stats and leaderboard side by side on desktop -->
+        <div class="gameover-content">
+            <!-- Left column: Statistics -->
+            <div class="gameover-stats-column">
+                <div id="stats-dashboard">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-kills">0</div>
+                            <div class="stat-label">Kills</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-wave">1</div>
+                            <div class="stat-label">Wave</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-accuracy">0%</div>
+                            <div class="stat-label">Accuracy</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-headshots">0</div>
+                            <div class="stat-label">Headshots</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-time">0:00</div>
+                            <div class="stat-label">Time</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-damage">0</div>
+                            <div class="stat-label">Damage</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-best-streak">0</div>
+                            <div class="stat-label">Streak</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-favorite-weapon">Pistol</div>
+                            <div class="stat-label">Favorite</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="stats-row">
-                <div class="stat-card">
-                    <div class="stat-icon">&#x1F30A;</div>
-                    <div class="stat-value" id="stat-wave">1</div>
-                    <div class="stat-label">Wave Reached</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">&#x1F4A5;</div>
-                    <div class="stat-value" id="stat-damage">0</div>
-                    <div class="stat-label">Damage Dealt</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">&#x23F1;</div>
-                    <div class="stat-value" id="stat-time">0:00</div>
-                    <div class="stat-label">Survival Time</div>
-                </div>
-            </div>
-            <div class="stats-row">
-                <div class="stat-card wide">
-                    <div class="stat-icon">&#x1F52B;</div>
-                    <div class="stat-value" id="stat-favorite-weapon">Pistol</div>
-                    <div class="stat-label">Favorite Weapon</div>
-                </div>
-                <div class="stat-card wide">
-                    <div class="stat-icon">&#x1F525;</div>
-                    <div class="stat-value" id="stat-best-streak">0</div>
-                    <div class="stat-label">Best Kill Streak</div>
+
+            <!-- Right column: Leaderboard -->
+            <div class="gameover-leaderboard-column">
+                <div id="rank-result" class="your-rank"></div>
+                <div id="gameover-leaderboard" class="leaderboard-container">
+                    <div class="leaderboard-title">TOP 10</div>
+                    <div id="gameover-leaderboard-content"></div>
                 </div>
             </div>
         </div>
 
-        <div id="rank-result" class="your-rank"></div>
-        <div id="gameover-leaderboard" class="leaderboard-container">
-            <div class="leaderboard-title">TOP 10 SURVIVORS</div>
-            <div id="gameover-leaderboard-content"></div>
+        <!-- Bottom actions -->
+        <div class="gameover-actions">
+            <div class="share-buttons" id="share-buttons">
+                <button class="share-btn twitter" id="share-twitter" aria-label="Share on Twitter">Tweet</button>
+                <button class="share-btn reddit" id="share-reddit" aria-label="Share on Reddit">Reddit</button>
+                <button class="share-btn copy" id="share-copy" aria-label="Copy score">Copy</button>
+            </div>
+            <div class="gameover-buttons">
+                <button class="menu-button" id="restart-button" aria-label="Play again">PLAY AGAIN</button>
+                <button class="menu-button secondary" id="menu-button" aria-label="Return to menu">MENU</button>
+            </div>
         </div>
-
-        <!-- Share Score Buttons -->
-        <div class="share-buttons" id="share-buttons">
-            <button class="share-btn twitter" id="share-twitter" aria-label="Share score on Twitter">
-                <span>&#x1D54F;</span> Tweet Score
-            </button>
-            <button class="share-btn reddit" id="share-reddit" aria-label="Share score on Reddit">
-                <span>&#x1F47D;</span> Share on Reddit
-            </button>
-            <button class="share-btn copy" id="share-copy" aria-label="Copy score to clipboard">
-                <span>&#x1F4CB;</span> Copy
-            </button>
-        </div>
-
-        <button class="menu-button" id="restart-button" aria-label="Play again with same settings">PLAY AGAIN</button>
-        <button class="menu-button secondary" id="menu-button" style="background: linear-gradient(180deg, #444, #222); border-color: #999;" aria-label="Return to main menu">MAIN MENU</button>
     </div>
+
 
     <div id="pause-screen" role="dialog" aria-labelledby="pause-title" aria-modal="true">
         <h2 class="menu-title" id="pause-title">PAUSED</h2>
@@ -3594,6 +3668,87 @@
 
             .cosmetic-desc {
                 font-size: 9px;
+            }
+        }
+    
+        /* Landscape mode adjustments */
+        @media (max-height: 500px) and (orientation: landscape) {
+            #game-over-screen {
+                padding: 8px 15px;
+            }
+
+            .gameover-header .menu-title {
+                font-size: 24px !important;
+                margin-bottom: 2px;
+            }
+
+            #final-score {
+                font-size: 20px !important;
+                margin: 3px 0 !important;
+            }
+
+            .gameover-content {
+                flex-direction: row;
+                gap: 15px;
+                max-width: 95%;
+            }
+
+            .gameover-stats-column {
+                max-width: 45%;
+            }
+
+            .gameover-leaderboard-column {
+                max-width: 45%;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 4px;
+            }
+
+            .stat-card {
+                padding: 4px 2px;
+            }
+
+            .stat-value {
+                font-size: 13px;
+            }
+
+            .stat-label {
+                font-size: 7px;
+            }
+
+            #gameover-leaderboard {
+                max-height: 150px;
+                padding: 6px 10px;
+            }
+
+            #gameover-leaderboard .leaderboard-title {
+                font-size: 12px;
+                margin-bottom: 4px;
+            }
+
+            #gameover-leaderboard .leaderboard-table td,
+            #gameover-leaderboard .leaderboard-table th {
+                font-size: 10px;
+                padding: 2px 4px;
+            }
+
+            .gameover-actions {
+                flex-direction: row;
+                gap: 15px;
+                margin-top: 5px;
+            }
+
+            .share-btn {
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+
+            .gameover-buttons .menu-button {
+                min-width: 90px;
+                padding: 6px 12px;
+                font-size: 12px;
             }
         }
     </style>
