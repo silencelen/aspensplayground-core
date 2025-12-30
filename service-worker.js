@@ -9,6 +9,7 @@ const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
     '/game.js',
+    '/modules/GameCore.js',
     '/manifest.json',
     '/privacy.html',
     '/terms.html',
