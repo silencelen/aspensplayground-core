@@ -726,7 +726,7 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "blob:"],
-            connectSrc: ["'self'", "ws:", "wss:"],  // Allow WebSocket connections
+            connectSrc: ["'self'", "ws:", "wss:", "https://cdnjs.cloudflare.com"],  // Allow WebSocket and CDN connections
             workerSrc: ["'self'", "blob:"],
             objectSrc: ["'none'"],
             upgradeInsecureRequests: []
