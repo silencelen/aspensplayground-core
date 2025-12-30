@@ -4499,11 +4499,11 @@ function handleZombieAbility(message) {
         zombie.abilityState.leapStartPos = { x: zombie.position.x, z: zombie.position.z };
         // Target position will be interpolated by server sync
         zombie.abilityState.leapTargetPos = { x: zombie.position.x, z: zombie.position.z };
-        DebugLog.log(, 'game');
+        DebugLog.log('Runner ' + message.zombieId + ' started leap', 'game');
     } else if (message.ability === 'charge') {
         zombie.abilityState.isCharging = true;
         zombie.abilityState.chargeStartTime = now;
-        DebugLog.log(, 'game');
+        DebugLog.log('Tank ' + message.zombieId + ' started charge', 'game');
     }
 }
 
