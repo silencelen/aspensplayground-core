@@ -3775,7 +3775,7 @@ function connectToServer() {
     let wsUrl;
     if (window.location.protocol === 'file:' || !window.location.host) {
         // Running in Electron or local file - connect to production server
-        wsUrl = 'wss://aspensplayground.com';
+        wsUrl = 'wss://aspensplayground.com:3000';
     } else {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}`;
