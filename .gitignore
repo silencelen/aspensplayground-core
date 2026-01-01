@@ -29,3 +29,7 @@ Thumbs.db
 # Leaderboard data (regenerated)
 leaderboard.json
 ssl/
+
+# Generated/internal files
+*.pdf
+AUDIT_REPORT*.md
