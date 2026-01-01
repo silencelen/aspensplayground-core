@@ -671,7 +671,10 @@ const ALLOWED_ORIGINS = [
 
 // Check if origin is allowed (supports port variations)
 function isOriginAllowed(origin) {
-    if (!origin) return false;
+    // Allow null origins (same-origin requests, curl, mobile apps)
+    if (!origin) return true;
+    // Allow file:// origins (Electron desktop app)
+    if (origin === 'file://' || origin.startsWith('file://')) return true;
     // Allow if origin matches any allowed origin (with or without port)
     return ALLOWED_ORIGINS.some(allowed => {
         // Exact match
