@@ -36,8 +36,8 @@ function createWindow() {
             responseHeaders: {
                 ...details.responseHeaders,
                 'Content-Security-Policy': [
-                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; " +
+                    "default-src 'self' 'unsafe-inline' data: blob:; " +
+                    "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
                     "connect-src 'self' wss://aspensplayground.com ws://aspensplayground.com https://aspensplayground.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdnjs.cloudflare.com; " +
                     "font-src 'self' https://fonts.gstatic.com; " +
                     "img-src 'self' data: blob:; " +

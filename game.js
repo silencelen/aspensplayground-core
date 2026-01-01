@@ -5014,8 +5014,8 @@ function handleWaveComplete(message) {
     playerState.score += message.bonus;
     updateHUD();
 
-    // Deactivate boss mode when wave completes
-    const isBossWave = message.wave % 5 === 0;
+    // Deactivate boss mode when wave completes (bosses spawn every 10 waves)
+    const isBossWave = message.wave % 10 === 0;
     if (isBossWave && typeof MapManager !== 'undefined') {
         MapManager.deactivateBossMode();
     }

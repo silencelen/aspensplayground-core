@@ -1935,6 +1935,13 @@ function removePlayer(id) {
     const player = room.players.get(id);
     if (player) {
         log(`Player ${player.name} (${id}) left room ${room.id}. Room players: ${room.players.size - 1}`, 'PLAYER');
+
+        // Clean up game session to prevent memory leak
+        const sessionToken = playerIdToToken.get(id);
+        if (sessionToken) {
+            endGameSession(sessionToken);
+        }
+
         room.players.delete(id);
         playerRooms.delete(id);
 
