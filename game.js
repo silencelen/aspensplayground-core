@@ -1227,19 +1227,21 @@ const WeaponUpgrades = {
         // Unlock cursor for shop interaction
         document.exitPointerLock();
 
-        // Start countdown (30 seconds max)
-        let countdown = this.shopMaxTime;
+        // Start countdown (30 seconds max) - track actual elapsed time
+        const shopStartTime = Date.now();
+        const shopDuration = this.shopMaxTime * 1000; // Convert to ms
         const shopCountdownEl = document.getElementById('shop-countdown');
-        if (shopCountdownEl) shopCountdownEl.textContent = countdown;
+        if (shopCountdownEl) shopCountdownEl.textContent = this.shopMaxTime;
 
         this.shopCountdown = setInterval(() => {
-            countdown--;
+            const elapsed = Date.now() - shopStartTime;
+            const remaining = Math.max(0, Math.ceil((shopDuration - elapsed) / 1000));
             const el = document.getElementById('shop-countdown');
-            if (el) el.textContent = countdown;
-            if (countdown <= 0) {
+            if (el) el.textContent = remaining;
+            if (remaining <= 0) {
                 this.closeShop();
             }
-        }, 1000);
+        }, 200); // Check more frequently for accuracy
 
         // In multiplayer, notify server that we're in shop
         if (GameState.mode === 'multiplayer' && GameState.isConnected) {
