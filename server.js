@@ -1041,6 +1041,43 @@ app.post('/api/leaderboard', (req, res) => {
     });
 });
 
+// Singleplayer score submission (no session required)
+// Less strict verification since singleplayer is inherently client-side
+app.post('/api/leaderboard/singleplayer', (req, res) => {
+    const { name, score, wave, kills } = req.body;
+
+    // Basic validation
+    if (typeof score !== 'number' || score <= 0 || score > 10000000) {
+        return res.status(400).json({ error: 'Invalid score' });
+    }
+    if (typeof wave !== 'number' || wave < 1 || wave > 1000) {
+        return res.status(400).json({ error: 'Invalid wave' });
+    }
+    if (typeof kills !== 'number' || kills < 0 || kills > 100000) {
+        return res.status(400).json({ error: 'Invalid kills' });
+    }
+
+    // Sanity check: score should be roughly proportional to kills and wave
+    // This is a basic anti-cheat measure (not perfect, but catches obvious fakes)
+    const expectedMinScore = kills * 50; // Minimum ~50 points per kill
+    const expectedMaxScore = kills * 500 + wave * 1000; // Max ~500 per kill + wave bonus
+    if (score < expectedMinScore * 0.5 || score > expectedMaxScore * 2) {
+        log(`Singleplayer score rejected: suspicious ratio (score=${score}, kills=${kills}, wave=${wave})`, 'WARN');
+        return res.status(400).json({ error: 'Score validation failed' });
+    }
+
+    const result = addToLeaderboard(name, score, wave, kills);
+    log(`Singleplayer leaderboard: ${name} submitted score ${score} (wave ${wave}, ${kills} kills)`, 'INFO');
+
+    res.json({
+        ...result,
+        leaderboard,
+        verifiedScore: score,
+        verifiedWave: wave,
+        verifiedKills: kills
+    });
+});
+
 // Load leaderboard on startup
 loadLeaderboard();
 

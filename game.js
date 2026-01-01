@@ -1863,23 +1863,34 @@ async function fetchLeaderboard() {
 }
 
 async function submitScore(name) {
-    // Score, wave, kills are now tracked server-side for anti-cheat
-    // Only the player name and session token are sent
-    if (!sessionToken) {
-        DebugLog.log('Cannot submit score: No session token', 'error');
-        return { added: false, rank: -1, leaderboard: cachedLeaderboard };
-    }
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
     try {
-        const response = await fetch('/api/leaderboard', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, sessionToken }),
-            signal: controller.signal
-        });
+        let response;
+
+        if (sessionToken) {
+            // Multiplayer: use session-based submission (server-verified scores)
+            response = await fetch('/api/leaderboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, sessionToken }),
+                signal: controller.signal
+            });
+        } else {
+            // Singleplayer: submit score directly (client-side tracking)
+            response = await fetch('/api/leaderboard/singleplayer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name,
+                    score: playerState.score,
+                    wave: GameState.wave,
+                    kills: playerState.kills
+                }),
+                signal: controller.signal
+            });
+        }
         clearTimeout(timeoutId);
 
         if (response.ok) {
@@ -5088,10 +5099,16 @@ async function handleGameOver(message) {
         if (rankResult) {
             if (result.added && result.rank > 0) {
                 rankResult.innerHTML = `<span class="new-highscore">NEW HIGH SCORE! #${result.rank}</span>`;
-            } else if (cachedLeaderboard.length > 0) {
+            } else if (cachedLeaderboard.length >= 10) {
+                // Only show 'points away' if score is below minimum required
                 const minScore = cachedLeaderboard[cachedLeaderboard.length - 1].score;
-                const diff = minScore - playerState.score;
-                rankResult.textContent = `${diff.toLocaleString()} points away from Top 10`;
+                if (playerState.score < minScore) {
+                    const diff = minScore - playerState.score;
+                    rankResult.textContent = `${diff.toLocaleString()} points away from Top 10`;
+                } else {
+                    // Score should have qualified - check for submission error
+                    rankResult.textContent = 'Score submission error - try again';
+                }
             } else {
                 rankResult.textContent = '';
             }
@@ -13836,10 +13853,16 @@ async function singlePlayerGameOver() {
         if (rankResult) {
             if (result.added && result.rank > 0) {
                 rankResult.innerHTML = `<span class="new-highscore">NEW HIGH SCORE! #${result.rank}</span>`;
-            } else if (cachedLeaderboard.length > 0) {
+            } else if (cachedLeaderboard.length >= 10) {
+                // Only show 'points away' if score is below minimum required
                 const minScore = cachedLeaderboard[cachedLeaderboard.length - 1].score;
-                const diff = minScore - playerState.score;
-                rankResult.textContent = `${diff.toLocaleString()} points away from Top 10`;
+                if (playerState.score < minScore) {
+                    const diff = minScore - playerState.score;
+                    rankResult.textContent = `${diff.toLocaleString()} points away from Top 10`;
+                } else {
+                    // Score should have qualified - check for submission error
+                    rankResult.textContent = 'Score submission error - try again';
+                }
             } else {
                 rankResult.textContent = '';
             }
