@@ -33,7 +33,7 @@
     "icons": "node scripts/generate-icons.js"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
+    "electron": "^39.2.7",
     "electron-builder": "^24.9.1"
   },
   "build": {
