@@ -123,20 +123,40 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          CURRENT_TAG="v${{ steps.version.outputs.version }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "$CURRENT_TAG" | head -n 1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
+
       - name: Generate changelog
         run: |
-          cat > changelog.md << 'EOF'
-          ## Aspen's Playground v${{ steps.version.outputs.version }}
+          VERSION="${{ steps.version.outputs.version }}"
+          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
+          CURRENT_TAG="v$VERSION"
 
-          Survive waves of zombies in this intense 3D multiplayer shooter!
+          # Generate commit list
+          echo "## Aspen's Playground v$VERSION" > changelog.md
+          echo "" >> changelog.md
+          echo "Survive waves of zombies in this intense 3D multiplayer shooter!" >> changelog.md
+          echo "" >> changelog.md
 
-          ### Features
-          - Single-player and multiplayer co-op modes
-          - Multiple weapon types with upgrades
-          - Character cosmetics and customization
-          - Global leaderboards
-          - Wave-based survival gameplay
+          # Add changes since last release
+          echo "### Changes in this release" >> changelog.md
+          echo "" >> changelog.md
 
+          git log --pretty=format:"- %s" ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null | grep -v "^- 🤖 Generated with" | head -30 >> changelog.md || echo "- Initial release" >> changelog.md
+
+          echo "" >> changelog.md
+          echo "" >> changelog.md
+
+          # Add download info
+          cat >> changelog.md << 'EOF'
           ### Downloads
 
           | Platform | File | Description |
@@ -152,7 +172,12 @@ jobs:
           - **GPU**: WebGL 2.0 compatible
 
           ---
+
+          🎮 [Play in browser](https://aspensplayground.com) | 📖 [Wiki](https://github.com/silencelen/aspensplayground/wiki)
           EOF
+
+          echo "Generated changelog:"
+          cat changelog.md
 
       - name: List artifacts
         run: find artifacts -type f 2>/dev/null | head -20 || echo "No artifacts found"
