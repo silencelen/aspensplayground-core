@@ -9566,6 +9566,25 @@ function reload() {
     };
 
     function animateReload() {
+        // Cancel reload animation if player dies
+        if (!playerState.isAlive) {
+            weapon.isReloading = false;
+            reloadAnimationId = null;
+            if (reloadProgress) reloadProgress.style.display = 'none';
+            // Reset weapon model if it exists
+            if (weapon.model && weapon.modelOriginalRot) {
+                weapon.model.rotation.x = weapon.modelOriginalRot.x;
+                weapon.model.rotation.z = weapon.modelOriginalRot.z;
+                weapon.model.position.copy(weapon.modelOriginalPos);
+            }
+            if (weapon.magazine && weapon.magazineOriginalPos) {
+                weapon.magazine.position.copy(weapon.magazineOriginalPos);
+                weapon.magazine.rotation.x = 0;
+                weapon.magazine.visible = true;
+            }
+            return;
+        }
+
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / reloadDuration, 1);
 
