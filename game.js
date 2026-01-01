@@ -4812,7 +4812,11 @@ function handleZombieKilled(message) {
         zombie.isAlive = false;
         invalidateZombieMeshCache();
 
-        DebugLog.log(`Zombie killed by ${message.killerId}${message.isHeadshot ? ' (HEADSHOT!)' : ''}`, 'success');
+        // Calculate points using zombie's actual value (synced with singleplayer)
+        const basePoints = zombie.points || 100;
+        const points = basePoints + (message.isHeadshot ? Math.floor(basePoints * 0.5) : 0);
+
+        DebugLog.log(`Zombie killed by ${message.killerId}${message.isHeadshot ? ' (HEADSHOT!)' : ''} +${points}`, 'success');
 
         // Create blood splatter
         createBloodSplatter(new THREE.Vector3(
@@ -4824,11 +4828,20 @@ function handleZombieKilled(message) {
         // Death animation
         animateZombieDeath(zombie);
 
+        // Add to kill feed (visual feedback for all players)
+        KillFeed.addKill(zombie.type, message.isHeadshot, zombie.isBossWaveBoss, points);
+
         // Update kill count if we killed it
         if (message.killerId === localPlayerId) {
             playerState.kills++;
-            playerState.score += 100 + (message.isHeadshot ? 50 : 0);
+            playerState.score += points;
             registerKill(); // Track kill streak
+
+            // Track achievements and stats
+            Achievements.trackKill(message.isHeadshot, zombie.isBossWaveBoss);
+            Achievements.trackScore(playerState.score);
+            const currentWeapon = getWeaponStats().name;
+            GameStats.recordKill(currentWeapon);
         }
 
         GameState.totalKills++;
