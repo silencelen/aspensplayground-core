@@ -3593,9 +3593,12 @@
                 position: relative;
                 bottom: auto;
                 right: auto;
+                display: flex;
                 flex-direction: row;
+                justify-content: center;
                 margin-top: 8px;
                 gap: 8px;
+                width: 100%;
             }
 
             .cosmetics-button {
@@ -3628,10 +3631,15 @@
             }
 
             .legal-footer {
-                position: relative;
-                bottom: auto;
-                margin-top: auto;
-                padding-top: 5px;
+                position: absolute;
+                bottom: max(10px, env(safe-area-inset-bottom));
+                left: 50%;
+                transform: translateX(-50%);
+                margin-top: 0;
+                padding-top: 0;
+                display: flex;
+                justify-content: center;
+                gap: 15px;
             }
 
             .legal-footer a {
