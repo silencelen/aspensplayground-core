@@ -29,6 +29,25 @@ const MapManager = {
         console.log('[MapManager] Initialized');
     },
 
+    // Reset map state for new game - forces reload on next loadMap call
+    reset() {
+        console.log('[MapManager] Resetting for new game');
+        
+        // Deactivate boss mode if active
+        this.deactivateBossMode();
+        
+        // Destroy current map to clean up any leftover state
+        if (this.currentMap && this.scene) {
+            this.currentMap.destroy(this.scene);
+        }
+        
+        // Clear current map reference so next loadMap will actually load
+        this.currentMapId = null;
+        this.currentMap = null;
+        this.isTransitioning = false;
+        this.transitionPromise = null;
+    },
+
     // Register a map
     registerMap(mapId, mapInstance) {
         this.maps[mapId] = mapInstance;

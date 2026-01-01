@@ -4983,7 +4983,7 @@ async function handleWaveStart(message) {
     GameState.zombiesRemaining = message.zombieCount;
 
     // Handle map changes from server (multiplayer)
-    if (typeof MapManager !== 'undefined' && MapManager.currentMap && message.mapChanged) {
+    if (typeof MapManager !== 'undefined' && message.mapChanged) {
         DebugLog.log(`Server: Map changing to ${message.mapId}`, 'game');
 
         // Set map loading flag to buffer zombie spawns during transition
@@ -5099,6 +5099,17 @@ function handleGameStart(message) {
         if (p.mesh) scene.remove(p.mesh);
     });
     pickups.clear();
+
+    // Reset and load initial map for fresh start
+    if (typeof MapManager !== 'undefined') {
+        MapManager.reset();
+        MapManager.loadMap('dining_hall').then(() => {
+            const spawn = MapManager.getPlayerSpawn();
+            player.position.set(spawn.x, spawn.y, spawn.z);
+        }).catch(err => {
+            DebugLog.log(`Failed to load map: ${err.message}`, 'error');
+        });
+    }
 
     // Hide menus/lobby, show HUD
     setElementDisplay('start-screen', 'none');
@@ -12055,7 +12066,7 @@ function startSinglePlayerGame() {
     GameState.lastZombieId = 0;
 
     // Reset map to first map for wave 1
-    if (typeof MapManager !== 'undefined' && MapManager.currentMap) {
+    if (typeof MapManager !== 'undefined') {
         MapManager.deactivateBossMode();
         MapManager.loadMap('dining_hall').then(() => {
             const spawn = MapManager.getPlayerSpawn();
@@ -14433,6 +14444,11 @@ async function quitToMenu() {
     });
     zombies.clear();
     invalidateZombieMeshCache();
+
+    // Reset map manager for fresh start on next game
+    if (typeof MapManager !== 'undefined') {
+        MapManager.reset();
+    }
 
     // Clear optimization systems
     ZombiePool.clear();
