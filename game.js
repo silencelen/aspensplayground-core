@@ -3771,8 +3771,15 @@ function connectToServer() {
         return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    // Determine WebSocket URL - use production server for Electron/file:// or same host for web
+    let wsUrl;
+    if (window.location.protocol === 'file:' || !window.location.host) {
+        // Running in Electron or local file - connect to production server
+        wsUrl = 'wss://aspensplayground.com';
+    } else {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${protocol}//${window.location.host}`;
+    }
 
     DebugLog.log(`Connecting to server: ${wsUrl}`, 'net');
 
