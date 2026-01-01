@@ -13926,18 +13926,78 @@ function showDamageEffect() {
 // ==================== EVENT LISTENERS ====================
 function initEventListeners() {
     // Single Player button
+    // Show name popup before starting game
+    function showNamePopup(mode) {
+        const popup = document.getElementById('name-popup');
+        const input = document.getElementById('name-popup-input');
+        const savedName = localStorage.getItem('playerName') || '';
+
+        if (popup && input) {
+            input.value = savedName;
+            popup.style.display = 'flex';
+            popup.dataset.mode = mode;
+            setTimeout(() => input.focus(), 100);
+        }
+    }
+
+    function hideNamePopup() {
+        const popup = document.getElementById('name-popup');
+        if (popup) popup.style.display = 'none';
+    }
+
+    function confirmNameAndStart() {
+        const popup = document.getElementById('name-popup');
+        const input = document.getElementById('name-popup-input');
+        const nameInput = document.getElementById('player-name-input');
+
+        if (!popup || !input) return;
+
+        const name = sanitizePlayerName(input.value.trim()) || 'Player';
+
+        // Save to localStorage and sync to hidden input
+        localStorage.setItem('playerName', name);
+        if (nameInput) nameInput.value = name;
+
+        const mode = popup.dataset.mode;
+        hideNamePopup();
+
+        if (mode === 'singleplayer') {
+            GameState.mode = 'singleplayer';
+            startSinglePlayerGame();
+        } else if (mode === 'multiplayer') {
+            GameState.mode = 'multiplayer';
+            setElementDisplay('start-screen', 'none');
+            setElementDisplay('lobby-screen', 'flex');
+            connectToServer();
+        }
+    }
+
     document.getElementById('singleplayer-button')?.addEventListener('click', () => {
-        GameState.mode = 'singleplayer';
-        startSinglePlayerGame();
+        showNamePopup('singleplayer');
     });
 
     // Multiplayer button - go to lobby
     document.getElementById('multiplayer-button')?.addEventListener('click', () => {
-        GameState.mode = 'multiplayer';
-        setElementDisplay('start-screen', 'none');
-        setElementDisplay('lobby-screen', 'flex');
-        connectToServer();
+        showNamePopup('multiplayer');
     });
+
+    // Name popup confirm button
+    document.getElementById('name-popup-confirm')?.addEventListener('click', confirmNameAndStart);
+
+    // Name popup cancel button
+    document.getElementById('name-popup-cancel')?.addEventListener('click', hideNamePopup);
+
+    // Name popup - press Enter to confirm
+    document.getElementById('name-popup-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            confirmNameAndStart();
+        } else if (e.key === 'Escape') {
+            hideNamePopup();
+        }
+    });
+
+    // Close name popup when clicking overlay
+    document.querySelector('.name-popup-overlay')?.addEventListener('click', hideNamePopup);
 
     // Ready button in lobby
     document.getElementById('ready-button')?.addEventListener('click', () => {

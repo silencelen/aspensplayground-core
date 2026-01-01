@@ -850,6 +850,65 @@
             box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
         }
 
+        
+        /* Name Entry Popup */
+        #name-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 400;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .name-popup-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .name-popup-content {
+            position: relative;
+            background: rgba(20, 0, 0, 0.95);
+            border: 2px solid #8b0000;
+            border-radius: 15px;
+            padding: 30px 40px;
+            text-align: center;
+            box-shadow: 0 0 40px rgba(139, 0, 0, 0.6);
+            max-width: 90%;
+            width: 350px;
+        }
+
+        .name-popup-title {
+            color: #ff0000;
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px #ff0000;
+        }
+
+        #name-popup-input {
+            width: 100%;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+
+        .name-popup-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .name-popup-buttons .menu-button {
+            min-width: 100px;
+        }
+
+
         .player-name-input::placeholder {
             color: #999;
             font-style: italic;
@@ -2587,7 +2646,7 @@
         <button id="settings-button" aria-label="Open game settings">SETTINGS</button>
         <div class="menu-title">ASPEN'S PLAYGROUND</div>
         <div class="menu-subtitle">Haunted Chuck E. Cheese Zombie Survival</div>
-        <div class="player-name-container">
+        <div class="player-name-container" style="display: none;">
             <label for="player-name-input" class="player-name-label">PLAYER NAME</label>
             <input type="text" id="player-name-input" class="player-name-input" placeholder="Enter your name..." maxlength="20">
         </div>
@@ -2620,6 +2679,20 @@
         <div class="legal-footer">
             <a href="/privacy.html" target="_blank">Privacy Policy</a>
             <a href="/terms.html" target="_blank">Terms of Service</a>
+        </div>
+    </div>
+
+    
+    <!-- Name Entry Popup -->
+    <div id="name-popup" style="display: none;" role="dialog" aria-labelledby="name-popup-title" aria-modal="true">
+        <div class="name-popup-overlay"></div>
+        <div class="name-popup-content">
+            <h2 class="name-popup-title" id="name-popup-title">ENTER YOUR NAME</h2>
+            <input type="text" id="name-popup-input" class="player-name-input" placeholder="Enter your name..." maxlength="20" autocomplete="off">
+            <div class="name-popup-buttons">
+                <button class="menu-button" id="name-popup-confirm">PLAY</button>
+                <button class="menu-button secondary" id="name-popup-cancel">CANCEL</button>
+            </div>
         </div>
     </div>
 
