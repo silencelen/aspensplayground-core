@@ -33,124 +33,100 @@
     "icons": "node scripts/generate-icons.js"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.1.8",
-    "electron-squirrel-startup": "^1.0.1"
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.aspensplayground.game",
     "productName": "Aspens Playground",
     "copyright": "Copyright © 2024 Aspen's Playground",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
     },
     "files": [
       "main.js",
-      "../index.html",
-      "../game.js",
-      "../service-worker.js",
-      "../modules/**/*",
-      "../maps/**/*",
-      "../privacy.html",
-      "../terms.html",
-      "../og-image.png",
-      "../manifest.json"
+      "package.json"
     ],
     "extraResources": [
       {
+        "from": "../index.html",
+        "to": "app/index.html"
+      },
+      {
+        "from": "../game.js",
+        "to": "app/game.js"
+      },
+      {
+        "from": "../service-worker.js",
+        "to": "app/service-worker.js"
+      },
+      {
+        "from": "../modules",
+        "to": "app/modules",
+        "filter": ["**/*"]
+      },
+      {
         "from": "../maps",
-        "to": "maps"
+        "to": "app/maps",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../privacy.html",
+        "to": "app/privacy.html"
+      },
+      {
+        "from": "../terms.html",
+        "to": "app/terms.html"
+      },
+      {
+        "from": "../manifest.json",
+        "to": "app/manifest.json"
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "ia32"]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
           "arch": ["x64"]
         }
       ],
-      "icon": "resources/icon.ico",
-      "publisherName": "Aspen's Playground",
-      "legalTrademarks": "Aspen's Playground",
-      "requestedExecutionLevel": "asInvoker",
-      "signAndEditExecutable": false
+      "icon": "resources/icon.png",
+      "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
     },
     "mac": {
       "target": [
         {
           "target": "dmg",
           "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
         }
       ],
-      "icon": "resources/icon.icns",
+      "icon": "resources/icon.png",
       "category": "public.app-category.games",
-      "darkModeSupport": true,
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "resources/entitlements.mac.plist",
-      "entitlementsInherit": "resources/entitlements.mac.plist"
+      "artifactName": "${productName}-${version}-Mac-${arch}.${ext}"
     },
     "linux": {
       "target": [
         {
           "target": "AppImage",
           "arch": ["x64"]
-        },
-        {
-          "target": "deb",
-          "arch": ["x64"]
-        },
-        {
-          "target": "rpm",
-          "arch": ["x64"]
         }
       ],
       "icon": "resources/icons",
       "category": "Game",
-      "synopsis": "Zombie survival shooter game",
-      "description": "Survive waves of zombies in this intense 3D multiplayer shooter. Features weapon upgrades, character cosmetics, co-op multiplayer, and global leaderboards.",
-      "desktop": {
-        "Name": "Aspen's Playground",
-        "Comment": "Zombie Survival Shooter",
-        "Categories": "Game;ActionGame;",
-        "Keywords": "zombie;shooter;survival;multiplayer;",
-        "StartupWMClass": "aspens-playground"
-      }
-    },
-    "dmg": {
-      "background": "resources/dmg-background.png",
-      "iconSize": 128,
-      "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
-      ],
-      "window": {
-        "width": 540,
-        "height": 400
-      }
+      "artifactName": "${productName}-${version}-Linux-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "resources/icon.ico",
-      "uninstallerIcon": "resources/icon.ico",
-      "installerHeaderIcon": "resources/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Aspen's Playground",
-      "license": "resources/license.txt",
-      "deleteAppDataOnUninstall": false
+      "shortcutName": "Aspen's Playground"
     },
     "publish": {
       "provider": "github",

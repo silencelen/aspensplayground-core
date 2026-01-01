@@ -1,14 +1,15 @@
 const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling
-if (require('electron-squirrel-startup')) {
-    app.quit();
-}
-
 let mainWindow;
 
 function createWindow() {
+    // Determine the correct path to resources
+    const isDev = !app.isPackaged;
+    const resourcePath = isDev
+        ? path.join(__dirname, '..')
+        : path.join(process.resourcesPath, 'app');
+
     // Create the browser window
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -16,7 +17,7 @@ function createWindow() {
         minWidth: 800,
         minHeight: 600,
         title: "Aspen's Playground",
-        icon: path.join(__dirname, 'icon.png'),
+        icon: path.join(__dirname, 'resources', 'icon.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -28,7 +29,7 @@ function createWindow() {
     });
 
     // Load the game
-    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    mainWindow.loadFile(path.join(resourcePath, 'index.html'));
 
     // Remove menu bar for cleaner game experience
     Menu.setApplicationMenu(null);

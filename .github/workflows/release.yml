@@ -9,18 +9,31 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.0)'
+        description: 'Version to release (e.g., 1.0.1)'
         required: true
-        default: '1.0.0'
+        default: '1.0.1'
 
 permissions:
   contents: write
 
 jobs:
-  # Generate icons first
-  prepare:
-    name: Prepare Assets
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact: windows-build
+          - os: macos-latest
+            platform: mac
+            artifact: mac-build
+          - os: ubuntu-latest
+            platform: linux
+            artifact: linux-build
+
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
@@ -31,149 +44,30 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install sharp for icon generation
+      - name: Install dependencies
         working-directory: ./electron
-        run: npm install sharp
+        run: npm install
 
       - name: Generate icons
         working-directory: ./electron
-        run: node scripts/generate-icons.js
+        run: |
+          npm install sharp --save-dev
+          node scripts/generate-icons.js
 
-      - name: Upload icon assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: icons
-          path: electron/resources/
-          retention-days: 1
-
-  build-windows:
-    name: Build Windows
-    needs: prepare
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download icons
-        uses: actions/download-artifact@v4
-        with:
-          name: icons
-          path: electron/resources/
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
+      - name: Build app
         working-directory: ./electron
-        run: npm install
-
-      - name: Build Windows executable
-        working-directory: ./electron
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Windows artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
+          name: ${{ matrix.artifact }}
           path: |
             electron/dist/*.exe
-          retention-days: 5
-
-  build-mac:
-    name: Build macOS
-    needs: prepare
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download icons
-        uses: actions/download-artifact@v4
-        with:
-          name: icons
-          path: electron/resources/
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        working-directory: ./electron
-        run: npm install
-
-      # Generate ICNS from PNG on macOS
-      - name: Generate macOS icon
-        run: |
-          mkdir -p electron/resources/icon.iconset
-          sips -z 16 16 electron/resources/icon.png --out electron/resources/icon.iconset/icon_16x16.png
-          sips -z 32 32 electron/resources/icon.png --out electron/resources/icon.iconset/icon_16x16@2x.png
-          sips -z 32 32 electron/resources/icon.png --out electron/resources/icon.iconset/icon_32x32.png
-          sips -z 64 64 electron/resources/icon.png --out electron/resources/icon.iconset/icon_32x32@2x.png
-          sips -z 128 128 electron/resources/icon.png --out electron/resources/icon.iconset/icon_128x128.png
-          sips -z 256 256 electron/resources/icon.png --out electron/resources/icon.iconset/icon_128x128@2x.png
-          sips -z 256 256 electron/resources/icon.png --out electron/resources/icon.iconset/icon_256x256.png
-          sips -z 512 512 electron/resources/icon.png --out electron/resources/icon.iconset/icon_256x256@2x.png
-          sips -z 512 512 electron/resources/icon.png --out electron/resources/icon.iconset/icon_512x512.png
-          cp electron/resources/icon.png electron/resources/icon.iconset/icon_512x512@2x.png
-          iconutil -c icns electron/resources/icon.iconset -o electron/resources/icon.icns
-
-      - name: Build macOS app
-        working-directory: ./electron
-        run: npx electron-builder --mac --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-build
-          path: |
             electron/dist/*.dmg
             electron/dist/*.zip
-          retention-days: 5
-
-  build-linux:
-    name: Build Linux
-    needs: prepare
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download icons
-        uses: actions/download-artifact@v4
-        with:
-          name: icons
-          path: electron/resources/
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        working-directory: ./electron
-        run: npm install
-
-      - name: Build Linux app
-        working-directory: ./electron
-        run: npx electron-builder --linux --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: |
             electron/dist/*.AppImage
             electron/dist/*.deb
             electron/dist/*.rpm
@@ -181,7 +75,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build-windows, build-mac, build-linux]
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
@@ -205,9 +99,8 @@ jobs:
           fi
 
       - name: Generate changelog
-        id: changelog
         run: |
-          cat > changelog.md << 'CHANGELOG_EOF'
+          cat > changelog.md << 'EOF'
           ## Aspen's Playground v${{ steps.version.outputs.version }}
 
           Survive waves of zombies in this intense 3D multiplayer shooter!
@@ -223,25 +116,21 @@ jobs:
 
           | Platform | File | Description |
           |----------|------|-------------|
-          | Windows | `Aspens Playground-*-win-x64.exe` | Installer (recommended) |
-          | Windows | `Aspens Playground-*-win-x64-portable.exe` | Portable (no install) |
-          | macOS | `Aspens Playground-*-mac-*.dmg` | Disk image |
-          | Linux | `Aspens Playground-*-linux-x64.AppImage` | AppImage (universal) |
-          | Linux | `Aspens Playground-*-linux-x64.deb` | Debian/Ubuntu package |
-          | Linux | `Aspens Playground-*-linux-x64.rpm` | Fedora/RHEL package |
+          | Windows | `.exe` (Setup) | Installer - recommended |
+          | Windows | `.exe` (Portable) | No installation needed |
+          | macOS | `.dmg` | Disk image |
+          | Linux | `.AppImage` | Universal Linux package |
 
           ### System Requirements
-          - **OS**: Windows 10+, macOS 10.15+, or Linux (glibc 2.31+)
+          - **OS**: Windows 10+, macOS 10.15+, or Linux
           - **RAM**: 4GB minimum
-          - **GPU**: WebGL 2.0 compatible graphics
+          - **GPU**: WebGL 2.0 compatible
 
-          ### Changes
-          CHANGELOG_EOF
-
-          git log $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --pretty=format:"- %s" >> changelog.md 2>/dev/null || echo "- Initial release" >> changelog.md
+          ---
+          EOF
 
       - name: List artifacts
-        run: find artifacts -type f -name "*" | head -50
+        run: find artifacts -type f | head -20
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -252,8 +141,9 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/windows-build/*
-            artifacts/mac-build/*
-            artifacts/linux-build/*
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
