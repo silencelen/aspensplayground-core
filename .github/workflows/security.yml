@@ -36,10 +36,11 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=high || true
+        run: |
+          npm audit --audit-level=high 2>&1 || echo "NPM audit completed"
 
       - name: Run npm audit (JSON output)
-        run: npm audit --json > npm-audit-results.json || true
+        run: npm audit --json > npm-audit-results.json 2>&1 || true
 
       - name: Upload audit results
         uses: actions/upload-artifact@v4
