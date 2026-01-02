@@ -10947,12 +10947,14 @@ function updateHUD() {
     // Update mobile HUD elements
     const mobileScore = document.getElementById('mobile-score');
     const mobileKills = document.getElementById('mobile-kills');
+    const mobileEnemies = document.getElementById('mobile-enemies');
     const mobileWaveNum = document.getElementById('mobile-wave-num');
     const mobileWeaponName = document.getElementById('mobile-weapon-name');
     const mobileAmmoCount = document.getElementById('mobile-ammo-count');
 
     if (mobileScore) mobileScore.textContent = playerState.score;
     if (mobileKills) mobileKills.textContent = playerState.kills;
+    if (mobileEnemies) mobileEnemies.textContent = totalEnemiesLeft;
     if (mobileWaveNum) mobileWaveNum.textContent = GameState.wave;
     if (mobileWeaponName) {
         const stats = getWeaponStats();
