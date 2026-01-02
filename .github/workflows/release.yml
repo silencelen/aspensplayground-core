@@ -1,9 +1,27 @@
 # Build and release desktop executables
+# Triggers on:
+# - Push to main with game code changes (auto-generates version)
+# - Push of version tags (v*.*.*)
+# - Manual workflow dispatch
 
 name: Release Desktop App
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      # Game code files
+      - 'game.js'
+      - 'server.js'
+      - 'index.html'
+      - 'modules/**'
+      - 'service-worker.js'
+      - 'manifest.json'
+      # Electron app files
+      - 'electron/**'
+      # Config files that affect game behavior
+      - 'package.json'
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -17,7 +35,73 @@ permissions:
   contents: write
 
 jobs:
+  # Determine version - auto-generate for code pushes, use tag/input for others
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.version.outputs.should_release }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - use input version
+            VERSION="${{ github.event.inputs.version }}"
+            echo "Using manual version: $VERSION"
+            SHOULD_RELEASE="true"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Tag push - extract version from tag
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "Using tag version: $VERSION"
+            SHOULD_RELEASE="true"
+          else
+            # Code push to main - auto-generate version
+            # Format: MAJOR.MINOR.YYYYMMDD.RUN_NUMBER
+            DATE_PART=$(date +%Y%m%d)
+
+            # Get latest version to determine major.minor
+            LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+' | head -n 1 || echo "v1.0.0")
+            MAJOR=$(echo $LATEST_TAG | sed 's/v//' | cut -d. -f1)
+            MINOR=$(echo $LATEST_TAG | sed 's/v//' | cut -d. -f2)
+
+            # Use run number as build number for uniqueness
+            BUILD_NUM=${{ github.run_number }}
+            VERSION="${MAJOR}.${MINOR}.${DATE_PART}.${BUILD_NUM}"
+            echo "Auto-generated version: $VERSION"
+
+            # Check if this exact version tag already exists
+            if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+              echo "Version v$VERSION already exists, skipping release"
+              SHOULD_RELEASE="false"
+            else
+              SHOULD_RELEASE="true"
+            fi
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+
+      - name: Create tag for auto-generated version
+        if: steps.version.outputs.should_release == 'true' && github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Auto-release v$VERSION"
+          git push origin "v$VERSION"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
+    needs: version
+    if: needs.version.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -98,8 +182,8 @@ jobs:
 
   release:
     name: Create Release
-    needs: build
-    if: always() && !cancelled()
+    needs: [version, build]
+    if: always() && needs.version.outputs.should_release == 'true' && !cancelled()
     runs-on: ubuntu-latest
 
     steps:
@@ -114,19 +198,11 @@ jobs:
           path: artifacts
         continue-on-error: true
 
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Get previous tag
         id: prev_tag
         run: |
-          CURRENT_TAG="v${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.version.outputs.version }}"
+          CURRENT_TAG="v$VERSION"
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "$CURRENT_TAG" | head -n 1)
           if [ -z "$PREV_TAG" ]; then
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
@@ -136,7 +212,7 @@ jobs:
 
       - name: Generate changelog
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.version.outputs.version }}"
           PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
           CURRENT_TAG="v$VERSION"
 
@@ -150,31 +226,31 @@ jobs:
           echo "### Changes in this release" >> changelog.md
           echo "" >> changelog.md
 
-          git log --pretty=format:"- %s" ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null | grep -v "^- 🤖 Generated with" | head -30 >> changelog.md || echo "- Initial release" >> changelog.md
+          git log --pretty=format:"- %s" ${PREV_TAG}..HEAD 2>/dev/null | grep -v "^- 🤖 Generated with" | head -30 >> changelog.md || echo "- Initial release" >> changelog.md
 
           echo "" >> changelog.md
           echo "" >> changelog.md
 
           # Add download info
           cat >> changelog.md << 'EOF'
-          ### Downloads
+### Downloads
 
-          | Platform | File | Description |
-          |----------|------|-------------|
-          | Windows | `.exe` (Setup) | Installer - recommended |
-          | Windows | `.exe` (Portable) | No installation needed |
-          | macOS | `.dmg` | Disk image |
-          | Linux | `.AppImage` | Universal Linux package |
+| Platform | File | Description |
+|----------|------|-------------|
+| Windows | `.exe` (Setup) | Installer - recommended |
+| Windows | `.exe` (Portable) | No installation needed |
+| macOS | `.dmg` | Disk image |
+| Linux | `.AppImage` | Universal Linux package |
 
-          ### System Requirements
-          - **OS**: Windows 10+, macOS 10.15+, or Linux
-          - **RAM**: 4GB minimum
-          - **GPU**: WebGL 2.0 compatible
+### System Requirements
+- **OS**: Windows 10+, macOS 10.15+, or Linux
+- **RAM**: 4GB minimum
+- **GPU**: WebGL 2.0 compatible
 
-          ---
+---
 
-          🎮 [Play in browser](https://aspensplayground.com) | 📖 [Wiki](https://github.com/silencelen/aspensplayground/wiki)
-          EOF
+🎮 [Play in browser](https://aspensplayground.com) | 📖 [Wiki](https://github.com/silencelen/aspensplayground/wiki)
+EOF
 
           echo "Generated changelog:"
           cat changelog.md
@@ -185,8 +261,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: "Aspen's Playground v${{ steps.version.outputs.version }}"
+          tag_name: v${{ needs.version.outputs.version }}
+          name: "Aspen's Playground v${{ needs.version.outputs.version }}"
           body_path: changelog.md
           draft: false
           prerelease: false
