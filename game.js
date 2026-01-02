@@ -407,6 +407,9 @@ const SpectatorMode = {
         this.isSpectating = true;
         this.spectatingPlayerId = alivePlayers[0].id;
 
+        // Hide the mesh of the player we're spectating (first-person view)
+        this.hideSpectatedMesh(this.spectatingPlayerId);
+
         // Detach camera from player and make it independent
         player.remove(camera);
         scene.add(camera);
@@ -416,10 +419,44 @@ const SpectatorMode = {
         return true;
     },
 
+    // Hide the mesh of the player we're spectating
+    hideSpectatedMesh(playerId) {
+        // First, show any previously hidden mesh
+        if (this._hiddenMeshId && this._hiddenMeshId !== playerId) {
+            const prevMesh = remotePlayerMeshes.get(this._hiddenMeshId);
+            const prevData = remotePlayers.get(this._hiddenMeshId);
+            if (prevMesh && prevData && prevData.isAlive) {
+                prevMesh.visible = true;
+            }
+        }
+
+        // Hide the new spectated player's mesh
+        const mesh = remotePlayerMeshes.get(playerId);
+        if (mesh) {
+            mesh.visible = false;
+            this._hiddenMeshId = playerId;
+        }
+    },
+
+    // Show all meshes (called when exiting spectator mode)
+    showAllMeshes() {
+        if (this._hiddenMeshId) {
+            const mesh = remotePlayerMeshes.get(this._hiddenMeshId);
+            const data = remotePlayers.get(this._hiddenMeshId);
+            if (mesh && data && data.isAlive) {
+                mesh.visible = true;
+            }
+            this._hiddenMeshId = null;
+        }
+    },
+
     // Exit spectator mode
     exit() {
         this.isSpectating = false;
         this.spectatingPlayerId = null;
+
+        // Show any hidden meshes
+        this.showAllMeshes();
 
         // Reattach camera to player
         scene.remove(camera);
@@ -438,6 +475,9 @@ const SpectatorMode = {
         const nextIndex = (currentIndex + 1) % alivePlayers.length;
         this.spectatingPlayerId = alivePlayers[nextIndex].id;
 
+        // Update mesh visibility
+        this.hideSpectatedMesh(this.spectatingPlayerId);
+
         this.updateSpectatorUI();
         DebugLog.log(`Now spectating: ${alivePlayers[nextIndex].name}`, 'info');
     },
@@ -450,6 +490,9 @@ const SpectatorMode = {
         const currentIndex = alivePlayers.findIndex(p => p.id === this.spectatingPlayerId);
         const prevIndex = (currentIndex - 1 + alivePlayers.length) % alivePlayers.length;
         this.spectatingPlayerId = alivePlayers[prevIndex].id;
+
+        // Update mesh visibility
+        this.hideSpectatedMesh(this.spectatingPlayerId);
 
         this.updateSpectatorUI();
         DebugLog.log(`Now spectating: ${alivePlayers[prevIndex].name}`, 'info');
@@ -486,16 +529,26 @@ const SpectatorMode = {
         camera.position.copy(targetPos);
 
         // Match player rotation exactly for first-person view
-        if (playerData.rotation) {
-            camera.rotation.order = 'YXZ';
+        // Use mesh rotation (interpolated) for smooth view, fall back to raw data
+        camera.rotation.order = 'YXZ';
+        if (mesh.rotation) {
+            // Mesh rotation is already interpolated, but offset by PI
+            camera.rotation.y = mesh.rotation.y - Math.PI;
+        } else if (playerData.rotation) {
             camera.rotation.y = playerData.rotation.y || 0;
-            camera.rotation.x = playerData.rotation.x || 0;
-            camera.rotation.z = 0;
         }
+        // Use targetHeadRotation for smooth vertical look
+        camera.rotation.x = playerData.targetHeadRotation !== undefined ? playerData.targetHeadRotation : (playerData.rotation ? playerData.rotation.x : 0);
+        camera.rotation.z = 0;
     },
 
     // Show spectator UI
     showSpectatorUI() {
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+        // Show death overlay first
+        this.showDeathOverlay();
+
         let ui = document.getElementById('spectator-ui');
         if (!ui) {
             ui = document.createElement('div');
@@ -505,20 +558,76 @@ const SpectatorMode = {
                 bottom: 20px;
                 left: 50%;
                 transform: translateX(-50%);
-                background: rgba(0, 0, 0, 0.7);
+                background: rgba(0, 0, 0, 0.8);
                 color: #fff;
-                padding: 12px 30px;
-                border-radius: 8px;
+                padding: 15px 25px;
+                border-radius: 10px;
                 font-family: 'Creepster', cursive;
                 text-align: center;
                 z-index: 1000;
                 border: 2px solid #ff4444;
-                pointer-events: none;
+                display: flex;
+                align-items: center;
+                gap: 15px;
             `;
             document.body.appendChild(ui);
         }
+        // Allow pointer events for mobile buttons
+        ui.style.pointerEvents = isMobile ? 'auto' : 'none';
         this.updateSpectatorUI();
-        ui.style.display = 'block';
+        ui.style.display = 'flex';
+    },
+
+    // Show "YOU DIED" overlay that fades out
+    showDeathOverlay() {
+        let overlay = document.getElementById('death-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'death-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(139, 0, 0, 0.6);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 999;
+                pointer-events: none;
+                animation: deathFade 3s forwards;
+            `;
+            overlay.innerHTML = `
+                <div style="text-align: center;">
+                    <div style="font-family: 'Creepster', cursive; font-size: 72px; color: #ff0000; text-shadow: 0 0 20px #000, 0 0 40px #8b0000;">YOU DIED</div>
+                    <div style="font-family: Arial, sans-serif; font-size: 18px; color: #fff; margin-top: 10px;">Entering spectator mode...</div>
+                </div>
+            `;
+
+            // Add fade animation if not exists
+            if (!document.getElementById('death-fade-style')) {
+                const style = document.createElement('style');
+                style.id = 'death-fade-style';
+                style.textContent = `
+                    @keyframes deathFade {
+                        0% { opacity: 1; }
+                        70% { opacity: 1; }
+                        100% { opacity: 0; visibility: hidden; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            document.body.appendChild(overlay);
+
+            // Remove after animation
+            setTimeout(() => {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            }, 3000);
+        }
     },
 
     // Update spectator UI with current player name
@@ -529,19 +638,73 @@ const SpectatorMode = {
         const playerData = remotePlayers.get(this.spectatingPlayerId);
         const playerName = playerData ? playerData.name : 'Unknown';
         const alivePlayers = this.getAlivePlayers();
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-        ui.innerHTML = `
-            <span style="color: #ff4444;">SPECTATING</span>
-            <span style="color: #ffcc00; margin: 0 10px;">${playerName}</span>
-            <span style="color: #888;">(${alivePlayers.length} alive)</span>
-            <span style="color: #666; margin-left: 15px;">[Q/E] Switch</span>
+        const buttonStyle = `
+            background: rgba(255,68,68,0.3);
+            border: 2px solid #ff4444;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'Creepster', cursive;
+            font-size: 18px;
+            cursor: pointer;
+            min-width: 44px;
+            min-height: 44px;
         `;
+
+        if (isMobile && alivePlayers.length > 1) {
+            ui.innerHTML = `
+                <button id="spectator-prev" style="${buttonStyle}" aria-label="Previous player">&lt;</button>
+                <div style="text-align: center; flex: 1;">
+                    <div style="color: #ff4444; font-size: 14px;">SPECTATING</div>
+                    <div style="color: #ffcc00; font-size: 20px;">${playerName}</div>
+                    <div style="color: #888; font-size: 12px;">${alivePlayers.length} alive</div>
+                </div>
+                <button id="spectator-next" style="${buttonStyle}" aria-label="Next player">&gt;</button>
+            `;
+
+            // Add touch event listeners
+            const prevBtn = document.getElementById('spectator-prev');
+            const nextBtn = document.getElementById('spectator-next');
+            if (prevBtn) prevBtn.addEventListener('touchstart', (e) => { e.preventDefault(); SpectatorMode.cyclePrev(); }, { passive: false });
+            if (nextBtn) nextBtn.addEventListener('touchstart', (e) => { e.preventDefault(); SpectatorMode.cycleNext(); }, { passive: false });
+        } else {
+            ui.innerHTML = `
+                <span style="color: #ff4444;">SPECTATING</span>
+                <span style="color: #ffcc00; margin: 0 10px;">${playerName}</span>
+                <span style="color: #888;">(${alivePlayers.length} alive)</span>
+                ${alivePlayers.length > 1 ? '<span style="color: #666; margin-left: 15px;">[Q/E] Switch</span>' : ''}
+            `;
+        }
     },
 
     // Hide spectator UI
     hideSpectatorUI() {
         const ui = document.getElementById('spectator-ui');
         if (ui) ui.style.display = 'none';
+
+        // Also remove death overlay if still present
+        const overlay = document.getElementById('death-overlay');
+        if (overlay && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
+    },
+
+    // Clean up all spectator DOM elements (call on game reset)
+    cleanup() {
+        // Show any hidden meshes first
+        this.showAllMeshes();
+
+        const ui = document.getElementById('spectator-ui');
+        if (ui && ui.parentNode) ui.parentNode.removeChild(ui);
+
+        const overlay = document.getElementById('death-overlay');
+        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+
+        this.isSpectating = false;
+        this.spectatingPlayerId = null;
+        this._hiddenMeshId = null;
     }
 };
 
@@ -4546,6 +4709,23 @@ function handlePlayerDied(playerId) {
             const alivePlayers = SpectatorMode.getAlivePlayers();
             if (alivePlayers.length > 0) {
                 SpectatorMode.enter();
+            } else {
+                // No one left alive - we're the last to die, trigger game over
+                if (!GameState.isGameOver) {
+                    DebugLog.log('Last player dead - triggering game over', 'game');
+                    // Show death overlay briefly before game over screen
+                    SpectatorMode.showDeathOverlay();
+                    // Delay game over slightly so death overlay is visible
+                    setTimeout(() => {
+                        if (!GameState.isGameOver) {
+                            handleGameOver({
+                                wave: GameState.wave,
+                                totalKills: GameStats.kills,
+                                totalScore: playerState.score
+                            });
+                        }
+                    }, 1500);
+                }
             }
         }
     } else {
@@ -4565,6 +4745,7 @@ function handlePlayerDied(playerId) {
                 const alivePlayers = SpectatorMode.getAlivePlayers();
                 if (alivePlayers.length > 0) {
                     SpectatorMode.spectatingPlayerId = alivePlayers[0].id;
+                    SpectatorMode.hideSpectatedMesh(alivePlayers[0].id);
                     SpectatorMode.updateSpectatorUI();
                 } else {
                     // No one left to spectate - game over for everyone
@@ -14519,10 +14700,8 @@ async function quitToMenu() {
     GameState.isRunning = false;
     GameState.isGameOver = false;
 
-    // Exit spectator mode if active
-    if (SpectatorMode.isSpectating) {
-        SpectatorMode.exit();
-    }
+    // Clean up spectator mode completely (removes DOM elements too)
+    SpectatorMode.cleanup();
 
     // Stop ambient sounds
     stopAmbientSounds();
