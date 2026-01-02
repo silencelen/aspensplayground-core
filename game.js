@@ -4958,7 +4958,7 @@ function handlePickupCollected(message) {
                 playerState.health = Math.min(playerState.health + 25, CONFIG.player.maxHealth);
                 DebugLog.log('Collected health! +25 HP', 'success');
             } else if (message.pickupType === 'ammo') {
-                weapon.reserveAmmo = Math.min(weapon.reserveAmmo + 15, 180);
+                weapon.reserveAmmo = Math.min(weapon.reserveAmmo + 15, WEAPONS[weapon.current].reserveMax);
                 DebugLog.log('Collected ammo! +15', 'success');
             } else if (message.pickupType === 'grenade') {
                 weapon.grenades = Math.min(weapon.grenades + 2, 10);
@@ -5082,8 +5082,22 @@ function handleGameStart(message) {
     playerState.stamina = CONFIG.player.maxStamina;
     playerState.kills = 0;
     playerState.score = 0;
-    weapon.ammo = CONFIG.player.startAmmo;
-    weapon.reserveAmmo = CONFIG.player.reserveAmmo;
+
+    // Reset weapons to starting state
+    weapon.current = 'pistol';
+    weapon.ammo = WEAPONS.pistol.magSize;
+    weapon.reserveAmmo = WEAPONS.pistol.reserveMax;
+    weapon.isReloading = false;
+    weapon.grenades = 3;
+    // Reset all weapon inventories to full
+    weapon.inventory = {
+        pistol: { ammo: WEAPONS.pistol.magSize, reserve: WEAPONS.pistol.reserveMax },
+        smg: { ammo: WEAPONS.smg.magSize, reserve: WEAPONS.smg.reserveMax },
+        shotgun: { ammo: WEAPONS.shotgun.magSize, reserve: WEAPONS.shotgun.reserveMax },
+        rocketLauncher: { ammo: WEAPONS.rocketLauncher.magSize, reserve: WEAPONS.rocketLauncher.reserveMax },
+        laserGun: { ammo: WEAPONS.laserGun.magSize, reserve: WEAPONS.laserGun.reserveMax }
+    };
+    updateWeaponModel();
 
     // Reset game statistics (sets startTime for survival timer)
     GameStats.reset();
@@ -12066,8 +12080,22 @@ function startSinglePlayerGame() {
     playerState.isAlive = true;
     playerState.kills = 0;
     playerState.score = 0;
-    weapon.ammo = CONFIG.player.startAmmo;
-    weapon.reserveAmmo = CONFIG.player.reserveAmmo;
+
+    // Reset weapons to starting state
+    weapon.current = 'pistol';
+    weapon.ammo = WEAPONS.pistol.magSize;
+    weapon.reserveAmmo = WEAPONS.pistol.reserveMax;
+    weapon.isReloading = false;
+    weapon.grenades = 3;
+    // Reset all weapon inventories to full
+    weapon.inventory = {
+        pistol: { ammo: WEAPONS.pistol.magSize, reserve: WEAPONS.pistol.reserveMax },
+        smg: { ammo: WEAPONS.smg.magSize, reserve: WEAPONS.smg.reserveMax },
+        shotgun: { ammo: WEAPONS.shotgun.magSize, reserve: WEAPONS.shotgun.reserveMax },
+        rocketLauncher: { ammo: WEAPONS.rocketLauncher.magSize, reserve: WEAPONS.rocketLauncher.reserveMax },
+        laserGun: { ammo: WEAPONS.laserGun.magSize, reserve: WEAPONS.laserGun.reserveMax }
+    };
+    updateWeaponModel();
 
     // Reset game state
     GameState.isRunning = true;
@@ -14018,7 +14046,7 @@ function collectSinglePlayerPickup(pickupId) {
         playerState.health = Math.min(playerState.health + 25, CONFIG.player.maxHealth);
         DebugLog.log('Collected health! +25 HP', 'success');
     } else if (pickup.type === 'ammo') {
-        weapon.reserveAmmo = Math.min(weapon.reserveAmmo + 15, 180);
+        weapon.reserveAmmo = Math.min(weapon.reserveAmmo + 15, WEAPONS[weapon.current].reserveMax);
         DebugLog.log('Collected ammo! +15', 'success');
     } else if (pickup.type === 'grenade') {
         weapon.grenades = Math.min(weapon.grenades + 2, 10);
