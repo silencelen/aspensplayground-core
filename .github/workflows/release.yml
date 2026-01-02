@@ -137,7 +137,9 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           echo "Setting version to: $VERSION"
-          npm version $VERSION --no-git-tag-version --allow-same-version
+          # Use node to set version directly (npm version mangles 4-part versions)
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+          cat package.json | grep version
         shell: bash
 
       - name: Generate icons

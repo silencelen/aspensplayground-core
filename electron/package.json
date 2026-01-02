@@ -139,7 +139,7 @@
     "publish": {
       "provider": "github",
       "owner": "silencelen",
-      "repo": "aspensplayground",
+      "repo": "aspensplayground-core",
       "releaseType": "release"
     }
   }
