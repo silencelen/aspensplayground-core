@@ -32,6 +32,9 @@
     "build:all": "electron-builder -mwl",
     "icons": "node scripts/generate-icons.js"
   },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
   "devDependencies": {
     "electron": "^39.2.7",
     "electron-builder": "^24.9.1"
@@ -46,6 +49,7 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "package.json"
     ],
     "extraResources": [
@@ -95,8 +99,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "resources/icon.png",
-      "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
+      "icon": "resources/icon.png"
     },
     "mac": {
       "target": [
@@ -126,7 +129,12 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Aspen's Playground"
+      "shortcutName": "Aspen's Playground",
+      "uninstallDisplayName": "Aspen's Playground",
+      "artifactName": "${productName}-${version}-Windows-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Windows-Portable.${ext}"
     },
     "publish": {
       "provider": "github",

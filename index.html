@@ -2438,6 +2438,159 @@
             0%, 100% { box-shadow: 0 0 10px #ff6600; }
             50% { box-shadow: 0 0 20px #ff0000; }
         }
+
+        /* Update Notification Banner (Electron only) */
+        #update-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            max-width: 350px;
+            background: rgba(20, 0, 0, 0.95);
+            border: 2px solid #44aa44;
+            border-radius: 10px;
+            padding: 15px 20px;
+            z-index: 500;
+            display: none;
+            box-shadow: 0 0 30px rgba(68, 170, 68, 0.4);
+            animation: slideInRight 0.3s ease-out;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        #update-notification.hiding {
+            animation: slideOutRight 0.3s ease-in forwards;
+        }
+
+        @keyframes slideOutRight {
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+
+        #update-notification .update-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        #update-notification .update-title {
+            color: #44ff44;
+            font-size: 16px;
+            text-shadow: 0 0 10px #44ff44;
+        }
+
+        #update-notification .update-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+
+        #update-notification .update-close:hover {
+            color: #ff4444;
+        }
+
+        #update-notification .update-version {
+            color: #aaa;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        #update-notification .update-version span {
+            color: #44ff44;
+        }
+
+        #update-notification .update-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        #update-notification .update-btn {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #update-notification .update-btn.primary {
+            background: linear-gradient(180deg, #228822 0%, #115511 100%);
+            border-color: #44ff44;
+            color: white;
+        }
+
+        #update-notification .update-btn.primary:hover {
+            background: linear-gradient(180deg, #44aa44 0%, #228822 100%);
+        }
+
+        #update-notification .update-btn.primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #update-notification .update-btn.secondary {
+            background: transparent;
+            border-color: #666;
+            color: #aaa;
+        }
+
+        #update-notification .update-btn.secondary:hover {
+            border-color: #888;
+            color: #ccc;
+        }
+
+        #update-notification .update-progress {
+            display: none;
+            margin-top: 10px;
+        }
+
+        #update-notification .progress-bar-container {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        #update-notification .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #228822, #44ff44);
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+
+        #update-notification .progress-text {
+            color: #888;
+            font-size: 11px;
+            text-align: center;
+        }
+
+        #update-notification.ready .update-btn.primary {
+            background: linear-gradient(180deg, #cc8800 0%, #886600 100%);
+            border-color: #ffaa00;
+        }
+
+        #update-notification.ready .update-btn.primary:hover {
+            background: linear-gradient(180deg, #ee9900 0%, #aa7700 100%);
+        }
     </style>
 </head>
 <body>
@@ -2500,6 +2653,28 @@
             <li>Some privacy extensions may block WebGL</li>
         </ul>
         <button class="retry-btn" onclick="location.reload()">Retry</button>
+    </div>
+
+    <!-- Update Notification Banner (Electron app only) -->
+    <div id="update-notification" role="alert">
+        <div class="update-header">
+            <span class="update-title">Update Available</span>
+            <button class="update-close" aria-label="Dismiss">&times;</button>
+        </div>
+        <div class="update-version">
+            <span id="update-current-version">v1.0.0</span> &rarr;
+            <span id="update-new-version">v1.1.0</span>
+        </div>
+        <div class="update-actions">
+            <button class="update-btn primary" id="update-download-btn">Download</button>
+            <button class="update-btn secondary" id="update-later-btn">Later</button>
+        </div>
+        <div class="update-progress">
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-text">Downloading... 0%</div>
+        </div>
     </div>
 
     <div id="loading-screen">
@@ -4327,5 +4502,165 @@
     <script src="modules/GameCore.js"></script>
 
     <script src="game.js"></script>
+
+    <!-- Electron Update Notification Handler -->
+    <script>
+    (function() {
+        'use strict';
+
+        const UpdateNotification = {
+            container: null,
+            isElectron: false,
+            isPortable: false,
+
+            async init() {
+                this.container = document.getElementById('update-notification');
+                if (!this.container) return;
+
+                // Check if running in Electron
+                this.isElectron = typeof window.electronAPI !== 'undefined';
+                if (!this.isElectron) {
+                    console.log('[Update] Not running in Electron, updates disabled');
+                    return;
+                }
+
+                // Check if portable mode
+                try {
+                    this.isPortable = await window.electronAPI.isPortableMode();
+                    if (this.isPortable) {
+                        console.log('[Update] Portable mode, auto-updates disabled');
+                        return;
+                    }
+                } catch (e) {
+                    console.log('[Update] Could not detect portable mode:', e);
+                    return;
+                }
+
+                this.setupEventListeners();
+                this.setupElectronListeners();
+
+                // Display current version
+                try {
+                    const version = await window.electronAPI.getAppVersion();
+                    document.getElementById('update-current-version').textContent = 'v' + version;
+                } catch (e) {
+                    console.log('[Update] Could not get app version:', e);
+                }
+            },
+
+            setupEventListeners() {
+                // Close button
+                this.container.querySelector('.update-close').addEventListener('click', () => {
+                    this.hide();
+                });
+
+                // Download button
+                document.getElementById('update-download-btn').addEventListener('click', () => {
+                    this.startDownload();
+                });
+
+                // Later button
+                document.getElementById('update-later-btn').addEventListener('click', () => {
+                    this.hide();
+                });
+            },
+
+            setupElectronListeners() {
+                window.electronAPI.onUpdateAvailable((info) => {
+                    document.getElementById('update-new-version').textContent = 'v' + info.version;
+                    this.show();
+                });
+
+                window.electronAPI.onDownloadProgress((progress) => {
+                    this.updateProgress(progress.percent);
+                });
+
+                window.electronAPI.onUpdateDownloaded((info) => {
+                    this.showReadyToInstall(info.version);
+                });
+
+                window.electronAPI.onUpdateError((error) => {
+                    console.error('[Update] Error:', error);
+                    this.showError(error);
+                });
+            },
+
+            show() {
+                this.container.style.display = 'block';
+                this.container.classList.remove('hiding', 'ready');
+            },
+
+            hide() {
+                this.container.classList.add('hiding');
+                setTimeout(() => {
+                    this.container.style.display = 'none';
+                    this.container.classList.remove('hiding');
+                }, 300);
+            },
+
+            async startDownload() {
+                const downloadBtn = document.getElementById('update-download-btn');
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = 'Downloading...';
+
+                this.container.querySelector('.update-progress').style.display = 'block';
+                this.container.querySelector('.update-actions').style.display = 'none';
+
+                try {
+                    await window.electronAPI.downloadUpdate();
+                } catch (e) {
+                    console.error('[Update] Download failed:', e);
+                    this.showError(e.message || 'Download failed');
+                }
+            },
+
+            updateProgress(percent) {
+                const fill = this.container.querySelector('.progress-bar-fill');
+                const text = this.container.querySelector('.progress-text');
+                fill.style.width = percent + '%';
+                text.textContent = 'Downloading... ' + Math.round(percent) + '%';
+            },
+
+            showReadyToInstall(version) {
+                this.container.classList.add('ready');
+                this.container.querySelector('.update-progress').style.display = 'none';
+                this.container.querySelector('.update-actions').style.display = 'flex';
+
+                this.container.querySelector('.update-title').textContent = 'Ready to Install';
+
+                const downloadBtn = document.getElementById('update-download-btn');
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = 'Restart & Install';
+                downloadBtn.onclick = () => {
+                    window.electronAPI.installUpdate();
+                };
+
+                document.getElementById('update-later-btn').textContent = 'Install Later';
+            },
+
+            showError(message) {
+                this.container.querySelector('.update-progress').style.display = 'none';
+                this.container.querySelector('.update-actions').style.display = 'flex';
+
+                const downloadBtn = document.getElementById('update-download-btn');
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = 'Retry';
+
+                // Show brief error in progress text
+                const text = this.container.querySelector('.progress-text');
+                text.textContent = 'Error: ' + (message || 'Unknown error');
+                text.style.color = '#ff4444';
+                this.container.querySelector('.update-progress').style.display = 'block';
+            }
+        };
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => UpdateNotification.init());
+        } else {
+            UpdateNotification.init();
+        }
+    })();
+    </script>
 </body>
 </html>

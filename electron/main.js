@@ -1,7 +1,169 @@
-const { app, BrowserWindow, Menu, session } = require('electron');
+const { app, BrowserWindow, Menu, session, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
+
+/**
+ * Detect if running as portable version vs installed version
+ * Portable version should not auto-update (users manage manually)
+ */
+function isPortableMode() {
+    const exePath = app.getPath('exe');
+    const exeDir = path.dirname(exePath);
+
+    // Method 1: Check if running from a "Portable" named executable
+    if (exePath.toLowerCase().includes('portable')) {
+        return true;
+    }
+
+    // Method 2: Check for uninstall registry/file (NSIS creates this)
+    const uninstallerPath = path.join(exeDir, 'Uninstall Aspens Playground.exe');
+    if (fs.existsSync(uninstallerPath)) {
+        return false; // Installed version
+    }
+
+    // Method 3: Check if app is in Program Files
+    const programFiles = process.env['PROGRAMFILES'] || 'C:\\Program Files';
+    const programFilesX86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+
+    if (exeDir.startsWith(programFiles) ||
+        exeDir.startsWith(programFilesX86) ||
+        exeDir.includes('AppData\\Local\\Programs')) {
+        return false; // Likely installed
+    }
+
+    // Method 4: Check for portable marker file
+    const portableMarker = path.join(exeDir, '.portable');
+    if (fs.existsSync(portableMarker)) {
+        return true;
+    }
+
+    // Default: assume portable if none of the above (safer default)
+    return true;
+}
+
+/**
+ * Set up auto-updater for installed versions only
+ */
+function setupAutoUpdater() {
+    // Skip updates in development mode
+    if (!app.isPackaged) {
+        console.log('[AutoUpdater] Development mode - auto-update disabled');
+        return;
+    }
+
+    // Skip updates in portable mode
+    if (isPortableMode()) {
+        console.log('[AutoUpdater] Portable mode detected - auto-update disabled');
+        return;
+    }
+
+    // Configure auto-updater
+    autoUpdater.autoDownload = false; // User must approve
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowDowngrade = false;
+
+    // Logging
+    autoUpdater.logger = {
+        info: (msg) => console.log('[AutoUpdater]', msg),
+        warn: (msg) => console.warn('[AutoUpdater]', msg),
+        error: (msg) => console.error('[AutoUpdater]', msg)
+    };
+
+    // Event handlers
+    autoUpdater.on('checking-for-update', () => {
+        console.log('[AutoUpdater] Checking for updates...');
+    });
+
+    autoUpdater.on('update-available', (info) => {
+        console.log('[AutoUpdater] Update available:', info.version);
+        if (mainWindow) {
+            mainWindow.webContents.send('update-available', {
+                version: info.version,
+                releaseDate: info.releaseDate,
+                releaseNotes: info.releaseNotes
+            });
+        }
+    });
+
+    autoUpdater.on('update-not-available', () => {
+        console.log('[AutoUpdater] No updates available');
+        if (mainWindow) {
+            mainWindow.webContents.send('update-not-available');
+        }
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+        console.log(`[AutoUpdater] Download: ${progress.percent.toFixed(1)}%`);
+        if (mainWindow) {
+            mainWindow.webContents.send('download-progress', {
+                percent: progress.percent,
+                bytesPerSecond: progress.bytesPerSecond,
+                transferred: progress.transferred,
+                total: progress.total
+            });
+        }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+        console.log('[AutoUpdater] Update downloaded:', info.version);
+        if (mainWindow) {
+            mainWindow.webContents.send('update-downloaded', {
+                version: info.version
+            });
+        }
+    });
+
+    autoUpdater.on('error', (error) => {
+        console.error('[AutoUpdater] Error:', error);
+        if (mainWindow) {
+            mainWindow.webContents.send('update-error', error.message);
+        }
+    });
+}
+
+/**
+ * Set up IPC handlers for renderer communication
+ */
+function setupIpcHandlers() {
+    ipcMain.handle('check-for-updates', async () => {
+        if (!app.isPackaged) {
+            return { devMode: true };
+        }
+        if (isPortableMode()) {
+            return { portable: true };
+        }
+        try {
+            await autoUpdater.checkForUpdates();
+            return { checking: true };
+        } catch (error) {
+            return { error: error.message };
+        }
+    });
+
+    ipcMain.handle('download-update', async () => {
+        try {
+            await autoUpdater.downloadUpdate();
+            return { downloading: true };
+        } catch (error) {
+            return { error: error.message };
+        }
+    });
+
+    ipcMain.handle('install-update', () => {
+        autoUpdater.quitAndInstall(false, true);
+    });
+
+    ipcMain.handle('get-app-version', () => {
+        return app.getVersion();
+    });
+
+    ipcMain.handle('is-portable-mode', () => {
+        return isPortableMode();
+    });
+}
 
 function createWindow() {
     // Determine the correct path to resources
@@ -21,6 +183,7 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
             webgl: true,
             backgroundThrottling: false,
             webSecurity: true,
@@ -98,6 +261,15 @@ function createWindow() {
 
     mainWindow.webContents.on('did-finish-load', () => {
         console.log('[Electron] Game loaded successfully');
+
+        // Check for updates after window loads (with delay to not block startup)
+        setTimeout(() => {
+            if (app.isPackaged && !isPortableMode()) {
+                autoUpdater.checkForUpdates().catch(err => {
+                    console.log('[AutoUpdater] Initial check failed:', err.message);
+                });
+            }
+        }, 5000); // 5 second delay
     });
 
     mainWindow.webContents.on('certificate-error', (event, url, error, certificate, callback) => {
@@ -108,7 +280,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    setupIpcHandlers();
+    setupAutoUpdater();
     createWindow();
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();

@@ -177,6 +177,8 @@ jobs:
             electron/dist/*.AppImage
             electron/dist/*.deb
             electron/dist/*.rpm
+            electron/dist/*.yml
+            electron/dist/*.blockmap
           retention-days: 5
           if-no-files-found: warn
 
@@ -236,8 +238,8 @@ jobs:
           echo "" >> changelog.md
           echo "| Platform | File | Description |" >> changelog.md
           echo "|----------|------|-------------|" >> changelog.md
-          echo "| Windows | \`.exe\` (Setup) | Installer - recommended |" >> changelog.md
-          echo "| Windows | \`.exe\` (Portable) | No installation needed |" >> changelog.md
+          echo "| Windows | \`*-Setup.exe\` | **Installer** - Recommended, includes auto-updates |" >> changelog.md
+          echo "| Windows | \`*-Portable.exe\` | **Portable** - No installation, run anywhere |" >> changelog.md
           echo "| macOS | \`.dmg\` | Disk image |" >> changelog.md
           echo "| Linux | \`.AppImage\` | Universal Linux package |" >> changelog.md
           echo "" >> changelog.md
@@ -269,6 +271,8 @@ jobs:
             artifacts/**/*.dmg
             artifacts/**/*.zip
             artifacts/**/*.AppImage
+            artifacts/**/*.yml
+            artifacts/**/*.blockmap
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
