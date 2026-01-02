@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.aspensplayground.game",
-    "productName": "Aspens Playground",
+    "productName": "AspensPlayground",
     "copyright": "Copyright © 2024 Aspen's Playground",
     "directories": {
       "output": "dist",
