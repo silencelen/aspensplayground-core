@@ -132,6 +132,14 @@ jobs:
         working-directory: ./electron
         run: npm install
 
+      - name: Update version in package.json
+        working-directory: ./electron
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          echo "Setting version to: $VERSION"
+          npm version $VERSION --no-git-tag-version --allow-same-version
+        shell: bash
+
       - name: Generate icons
         working-directory: ./electron
         run: |
