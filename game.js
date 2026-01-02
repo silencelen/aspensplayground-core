@@ -1301,11 +1301,15 @@ const WeaponUpgrades = {
             canvas.requestPointerLock();
         }
 
-        DebugLog.log('Upgrade shop closed, starting next wave', 'game');
+        DebugLog.log(`Upgrade shop closed, starting wave ${GameState.wave}. isRunning=${GameState.isRunning}, isPaused=${GameState.isPaused}`, 'game');
 
         // Start next wave (singleplayer) or wait for server (multiplayer)
+        DebugLog.log(`closeShop mode check: mode=${GameState.mode}`, 'game');
         if (GameState.mode === 'singleplayer') {
-            startSinglePlayerWave();
+            startSinglePlayerWave().catch(err => {
+                DebugLog.log(`Error starting wave: ${err.message}`, 'error');
+                console.error('Wave start error:', err);
+            });
         }
 
         // Clear transition flag after pointer lock events have settled
@@ -12355,6 +12359,7 @@ async function startSinglePlayerWave() {
     hideBossHealthBar();
 
     // Spawn zombies using recursive setTimeout - more reliable on mobile
+    DebugLog.log(`Pre-spawn check: zombieCount=${zombieCount}, isRunning=${GameState.isRunning}, isPaused=${GameState.isPaused}`, 'game');
     if (zombieCount > 0 && GameState.isRunning) {
         spawnNextZombie(zombieCount, spawnInterval);
     }
@@ -12362,10 +12367,16 @@ async function startSinglePlayerWave() {
 
 // Recursive spawn function - respects pause state in singleplayer
 function spawnNextZombie(totalCount, interval) {
-    if (!GameState.isRunning || GameState.isGameOver) return;
+    if (!GameState.isRunning || GameState.isGameOver) {
+        DebugLog.log(`spawnNextZombie skipped - isRunning=${GameState.isRunning}, isGameOver=${GameState.isGameOver}`, 'warn');
+        return;
+    }
 
     // Don't spawn while paused - will be resumed by togglePause
-    if (GameState.isPaused) return;
+    if (GameState.isPaused) {
+        DebugLog.log('spawnNextZombie skipped - game paused', 'warn');
+        return;
+    }
 
     if (GameState.zombiesToSpawn > 0) {
         spawnSinglePlayerZombie();
