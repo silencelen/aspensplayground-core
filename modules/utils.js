@@ -278,18 +278,16 @@ const Interpolation = {
     },
 
     updateEntity(entity, targetPos, targetRot) {
-        // Normalize rotation to prevent issues with multi-rotation values
-        const normalizedRot = this.normalizeAngle(targetRot);
-
+        // Store raw rotation - lerpAngle handles wrapping during interpolation
         if (!entity.targetPosition) {
             entity.targetPosition = { x: targetPos.x, y: targetPos.y || 0, z: targetPos.z };
-            entity.targetRotation = normalizedRot;
+            entity.targetRotation = targetRot;
             entity.lastUpdateTime = Date.now();
         } else {
             entity.targetPosition.x = targetPos.x;
             entity.targetPosition.y = targetPos.y !== undefined ? targetPos.y : entity.targetPosition.y;
             entity.targetPosition.z = targetPos.z;
-            entity.targetRotation = normalizedRot;
+            entity.targetRotation = targetRot;
             entity.lastUpdateTime = Date.now();
         }
     },

@@ -417,6 +417,10 @@ const SpectatorMode = {
         player.remove(camera);
         scene.add(camera);
 
+        // Hide mobile controls in spectator mode (they block the death overlay)
+        const mobileControls = document.getElementById('mobile-controls');
+        if (mobileControls) mobileControls.classList.remove('visible');
+
         // Show the spectated player's weapon model
         this.updateSpectatorWeapon();
 
@@ -622,12 +626,12 @@ const SpectatorMode = {
         // Match player rotation exactly for first-person view
         // Use raw player rotation data for responsive spectating (not interpolated mesh)
         camera.rotation.order = 'YXZ';
-        // Y rotation (horizontal look) - use targetRotation for up-to-date direction
-        // Normalize angles to handle multiple full rotations properly
+        // Y rotation (horizontal look) - use lerpAngle with factor 1.0 for instant
+        // but continuous rotation (handles crossing 2π boundary smoothly)
         if (playerData.targetRotation !== undefined) {
-            camera.rotation.y = Interpolation.normalizeAngle(playerData.targetRotation);
+            camera.rotation.y = Interpolation.lerpAngle(camera.rotation.y, playerData.targetRotation, 1.0);
         } else if (playerData.rotation) {
-            camera.rotation.y = Interpolation.normalizeAngle(playerData.rotation.y || 0);
+            camera.rotation.y = Interpolation.lerpAngle(camera.rotation.y, playerData.rotation.y || 0, 1.0);
         }
         // X rotation (vertical look) - use targetHeadRotation for pitch
         const pitch = playerData.targetHeadRotation !== undefined ? playerData.targetHeadRotation : (playerData.rotation ? playerData.rotation.x : 0);
@@ -5657,11 +5661,24 @@ async function handleGameOver(message) {
     // Render leaderboard with highlight
     renderLeaderboard('gameover-leaderboard-content', result.rank);
 
+    // Exit spectator mode if active (cleanup UI properly)
+    if (SpectatorMode.isSpectating) {
+        SpectatorMode.exit();
+    }
+    SpectatorMode.hideSpectatorUI();
+
+    // Remove death overlay if present
+    const deathOverlay = document.getElementById('death-overlay');
+    if (deathOverlay && deathOverlay.parentNode) {
+        deathOverlay.parentNode.removeChild(deathOverlay);
+    }
+
     document.exitPointerLock();
     hideMobileControls();
     setElementDisplay('game-over-screen', 'flex');
     setElementDisplay('hud', 'none');
     setElementDisplay('crosshair', 'none');
+    setElementDisplay('multiplayer-panel', 'none');
 }
 
 function handleGameReset() {
