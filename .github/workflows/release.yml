@@ -63,17 +63,16 @@ jobs:
             SHOULD_RELEASE="true"
           else
             # Code push to main - auto-generate version
-            # Format: MAJOR.MINOR.YYYYMMDD.RUN_NUMBER
+            # Format: MAJOR.YYYYMMDD.RUN_NUMBER (3-part semver compatible)
             DATE_PART=$(date +%Y%m%d)
 
-            # Get latest version to determine major.minor
+            # Get latest version to determine major
             LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+' | head -n 1 || echo "v1.0.0")
             MAJOR=$(echo $LATEST_TAG | sed 's/v//' | cut -d. -f1)
-            MINOR=$(echo $LATEST_TAG | sed 's/v//' | cut -d. -f2)
 
-            # Use run number as build number for uniqueness
+            # Use run number as patch for uniqueness
             BUILD_NUM=${{ github.run_number }}
-            VERSION="${MAJOR}.${MINOR}.${DATE_PART}.${BUILD_NUM}"
+            VERSION="${MAJOR}.${DATE_PART}.${BUILD_NUM}"
             echo "Auto-generated version: $VERSION"
 
             # Check if this exact version tag already exists
