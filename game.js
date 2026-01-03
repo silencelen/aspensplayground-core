@@ -423,9 +423,10 @@ const SpectatorMode = {
         // IMMEDIATELY position camera at spectated player (don't wait for updateCamera)
         const spectatedMesh = remotePlayerMeshes.get(this.spectatingPlayerId);
         if (spectatedMesh && spectatedMesh.position) {
+            // mesh.position.y is feet-level, add CONFIG.player.height for eye level
             camera.position.set(
                 spectatedMesh.position.x,
-                CONFIG.player.height,
+                spectatedMesh.position.y + CONFIG.player.height,
                 spectatedMesh.position.z
             );
         }
@@ -643,9 +644,10 @@ const SpectatorMode = {
         }
 
         // Position camera exactly at the spectated player's eye position
+        // mesh.position.y is feet-level, add CONFIG.player.height for eye level
         const targetPos = new THREE.Vector3(
             mesh.position.x,
-            CONFIG.player.height, // Eye height
+            mesh.position.y + CONFIG.player.height, // Eye height above feet
             mesh.position.z
         );
 
@@ -6347,7 +6349,9 @@ function createRemotePlayerMesh(playerData) {
     group.userData.nametag = nametagGroup;
 
     // Position the entire model (no scaling - built at correct proportions)
-    group.position.set(playerData.position.x, 0, playerData.position.z);
+    // Y position is feet-level (0 = standing on ground, positive = jumping)
+    const initialY = playerData.position.y || 0;
+    group.position.set(playerData.position.x, initialY, playerData.position.z);
     group.rotation.y = playerData.rotation?.y || 0;
 
     scene.add(group);
@@ -12177,9 +12181,11 @@ function animate() {
                 // Only send if position/rotation changed significantly
                 const compressed = DeltaCompression.getCompressedUpdate(player.position, normalizedRotation);
                 if (compressed) {
+                    // Convert eye-level Y to feet-level Y for remote player mesh positioning
+                    const feetY = compressed.y - CONFIG.player.height;
                     sendToServer({
                         type: 'update',
-                        position: { x: compressed.x, y: compressed.y, z: compressed.z },
+                        position: { x: compressed.x, y: feetY, z: compressed.z },
                         rotation: { x: normalizedRotation.x, y: compressed.rotY }
                     });
                 }
