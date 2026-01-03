@@ -234,6 +234,7 @@ const DeltaCompression = {
     getCompressedUpdate(position, rotation) {
         const current = {
             x: position.x,
+            y: position.y,  // Include Y for jump visibility
             z: position.z,
             rotY: rotation.y
         };
@@ -244,10 +245,12 @@ const DeltaCompression = {
         }
 
         const dx = Math.abs(current.x - this.lastPlayerState.x);
+        const dy = Math.abs(current.y - this.lastPlayerState.y);  // Track Y changes
         const dz = Math.abs(current.z - this.lastPlayerState.z);
         const dRotY = Math.abs(current.rotY - this.lastPlayerState.rotY);
 
-        if (dx > this.positionThreshold || dz > this.positionThreshold || dRotY > this.rotationThreshold) {
+        // Send update if any position component or rotation changed
+        if (dx > this.positionThreshold || dy > this.positionThreshold || dz > this.positionThreshold || dRotY > this.rotationThreshold) {
             this.lastPlayerState = { ...current };
             return current;
         }

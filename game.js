@@ -12179,7 +12179,7 @@ function animate() {
                 if (compressed) {
                     sendToServer({
                         type: 'update',
-                        position: { x: compressed.x, y: player.position.y, z: compressed.z },
+                        position: { x: compressed.x, y: compressed.y, z: compressed.z },
                         rotation: { x: normalizedRotation.x, y: compressed.rotY }
                     });
                 }
