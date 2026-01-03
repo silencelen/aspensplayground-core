@@ -12089,13 +12089,18 @@ function animate() {
         if (GameState.mode === 'multiplayer') {
             const now = Date.now();
             if (now - lastNetworkUpdate > CONFIG.network.updateRate) {
+                // Normalize rotation to -PI to PI before sending (prevents unbounded growth)
+                const normalizedRotation = {
+                    x: playerState.rotation.x,
+                    y: Interpolation.normalizeAngle(playerState.rotation.y)
+                };
                 // Only send if position/rotation changed significantly
-                const compressed = DeltaCompression.getCompressedUpdate(player.position, playerState.rotation);
+                const compressed = DeltaCompression.getCompressedUpdate(player.position, normalizedRotation);
                 if (compressed) {
                     sendToServer({
                         type: 'update',
                         position: { x: compressed.x, y: player.position.y, z: compressed.z },
-                        rotation: { x: playerState.rotation.x, y: compressed.rotY }
+                        rotation: { x: normalizedRotation.x, y: compressed.rotY }
                     });
                 }
                 lastNetworkUpdate = now;
