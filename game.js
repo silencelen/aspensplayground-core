@@ -12490,8 +12490,11 @@ function updateRemotePlayerAnimations(delta) {
                 });
             }
 
-            // Slight body bob
-            mesh.position.y = Math.abs(Math.sin(playerData.walkCycle * 2)) * 0.03;
+            // Slight body bob - ADD to interpolated Y (targetPosition.y), don't replace it
+            // This preserves jump height while adding walking bob
+            const baseY = playerData.targetPosition?.y || 0;
+            const walkBob = Math.abs(Math.sin(playerData.walkCycle * 2)) * 0.03;
+            mesh.position.y = baseY + walkBob;
         } else {
             // Idle - reset to standing pose
             if (legGroup) {
@@ -12506,7 +12509,9 @@ function updateRemotePlayerAnimations(delta) {
                 });
             }
 
-            mesh.position.y *= 0.9; // Return to ground
+            // Return to interpolated Y position (handles jump landing smoothly)
+            const baseY = playerData.targetPosition?.y || 0;
+            mesh.position.y = mesh.position.y * 0.9 + baseY * 0.1;
         }
 
         // Shooting animation - arms and weapon recoil
