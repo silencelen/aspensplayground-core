@@ -5073,6 +5073,18 @@ function handleZombieDamaged(message) {
         zombie.health = message.health;
         // Health indicator removed - only bosses show health bars
     }
+
+    // Show damage numbers for spectators watching the attacker
+    if (SpectatorMode.isSpectating &&
+        message.attackerId === SpectatorMode.spectatingPlayerId &&
+        message.damage && message.position) {
+        DamageNumbers.show(
+            message.position,
+            message.damage,
+            message.isHeadshot,
+            message.damage >= 50 // Critical for high damage
+        );
+    }
 }
 
 function handleZombieAttack(message) {
@@ -5390,6 +5402,18 @@ function handleZombieKilled(message) {
             Achievements.trackScore(playerState.score);
             const currentWeapon = getWeaponStats().name;
             GameStats.recordKill(currentWeapon);
+        }
+
+        // Show damage numbers for spectators watching the killer
+        if (SpectatorMode.isSpectating &&
+            message.killerId === SpectatorMode.spectatingPlayerId &&
+            message.damage && message.position) {
+            DamageNumbers.show(
+                message.position,
+                message.damage,
+                message.isHeadshot,
+                message.damage >= 50 // Critical for high damage
+            );
         }
 
         GameState.totalKills++;

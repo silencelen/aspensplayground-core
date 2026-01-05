@@ -2538,7 +2538,7 @@ function damageZombie(zombieId, damage, attackerId, isHeadshot) {
     log(`Zombie ${zombieId} took ${damage} damage (${zombie.health}/${zombie.maxHealth} HP)`, 'GAME');
 
     if (zombie.health <= 0) {
-        killZombie(zombieId, attackerId, isHeadshot);
+        killZombie(zombieId, attackerId, isHeadshot, damage);
         return true;
     }
 
@@ -2546,13 +2546,17 @@ function damageZombie(zombieId, damage, attackerId, isHeadshot) {
         type: 'zombieDamaged',
         zombieId: zombieId,
         health: zombie.health,
-        maxHealth: zombie.maxHealth
+        maxHealth: zombie.maxHealth,
+        damage: damage,
+        attackerId: attackerId,
+        isHeadshot: isHeadshot,
+        position: zombie.position
     });
 
     return false;
 }
 
-function killZombie(zombieId, killerId, isHeadshot) {
+function killZombie(zombieId, killerId, isHeadshot, damage = 0) {
     // Get room from killer for proper room-scoped operations
     const room = getPlayerRoom(killerId);
     if (!room) {
@@ -2620,6 +2624,7 @@ function killZombie(zombieId, killerId, isHeadshot) {
         zombieId: zombieId,
         killerId: killerId,
         isHeadshot: isHeadshot,
+        damage: damage,
         position: zombie.position
     });
 
