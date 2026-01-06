@@ -2374,6 +2374,16 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Sanitize color value to prevent CSS injection
+function sanitizeColor(color) {
+    // Ensure color is a valid hex number, default to white
+    const num = typeof color === 'number' ? color : parseInt(color, 16);
+    if (isNaN(num) || num < 0 || num > 0xffffff) {
+        return '#ffffff';
+    }
+    return '#' + num.toString(16).padStart(6, '0');
+}
+
 // Sanitize player name to prevent XSS and ensure valid input
 function sanitizePlayerName(name) {
     if (typeof name !== 'string') return '';
@@ -11865,13 +11875,13 @@ function updatePlayerList() {
 
     // Add local player
     if (localPlayerData) {
-        const color = '#' + (localPlayerData.color || 0xffffff).toString(16).padStart(6, '0');
+        const color = sanitizeColor(localPlayerData.color || 0xffffff);
         listHtml += `<div style="color: ${color}; margin: 2px 0;">● ${escapeHtml(localPlayerData.name)} (You)</div>`;
     }
 
     // Add remote players
     remotePlayers.forEach((p, id) => {
-        const color = '#' + (p.color || 0xffffff).toString(16).padStart(6, '0');
+        const color = sanitizeColor(p.color || 0xffffff);
         const status = p.isAlive ? '●' : '✗';
         listHtml += `<div style="color: ${color}; margin: 2px 0; opacity: ${p.isAlive ? 1 : 0.5}">${status} ${escapeHtml(p.name)}</div>`;
     });
@@ -11895,7 +11905,9 @@ function updateConnectionStatus(connected) {
 
 function showWaveCompleteAnnouncement(waveNum, bonus, isBossWave = false) {
     const announcement = document.createElement('div');
-    const bonusText = bonus ? `+${bonus} POINTS` : '';
+    // Sanitize bonus to ensure it's a valid number
+    const sanitizedBonus = typeof bonus === 'number' && !isNaN(bonus) ? Math.floor(bonus) : 0;
+    const bonusText = sanitizedBonus > 0 ? `+${sanitizedBonus} POINTS` : '';
 
     announcement.style.cssText = `
         position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -11907,7 +11919,7 @@ function showWaveCompleteAnnouncement(waveNum, bonus, isBossWave = false) {
     `;
     announcement.innerHTML = `
         <div>${isBossWave ? 'BOSS DEFEATED!' : 'WAVE COMPLETE!'}</div>
-        <div style="font-size: 28px; margin-top: 10px; color: #ffd700;">${bonusText}</div>
+        <div style="font-size: 28px; margin-top: 10px; color: #ffd700;">${escapeHtml(bonusText)}</div>
     `;
 
     const style = document.createElement('style');
