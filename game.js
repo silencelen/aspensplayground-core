@@ -3038,6 +3038,10 @@ function initSettingsMenu() {
         userSettings.masterVolume = parseFloat(e.target.value);
         const masterVolumeValue = document.getElementById('master-volume-value');
         if (masterVolumeValue) masterVolumeValue.textContent = Math.round(userSettings.masterVolume * 100) + '%';
+        // Sync with AudioManager
+        if (typeof AudioManager !== 'undefined' && AudioManager.isInitialized) {
+            AudioManager.updateVolumes(userSettings.masterVolume, userSettings.sfxVolume, userSettings.musicVolume);
+        }
     });
 
     // SFX volume slider
@@ -3045,6 +3049,10 @@ function initSettingsMenu() {
         userSettings.sfxVolume = parseFloat(e.target.value);
         const sfxVolumeValue = document.getElementById('sfx-volume-value');
         if (sfxVolumeValue) sfxVolumeValue.textContent = Math.round(userSettings.sfxVolume * 100) + '%';
+        // Sync with AudioManager
+        if (typeof AudioManager !== 'undefined' && AudioManager.isInitialized) {
+            AudioManager.updateVolumes(userSettings.masterVolume, userSettings.sfxVolume, userSettings.musicVolume);
+        }
     });
 
     // Music volume slider
@@ -3052,6 +3060,10 @@ function initSettingsMenu() {
         userSettings.musicVolume = parseFloat(e.target.value);
         const musicVolumeValue = document.getElementById('music-volume-value');
         if (musicVolumeValue) musicVolumeValue.textContent = Math.round(userSettings.musicVolume * 100) + '%';
+        // Sync with AudioManager
+        if (typeof AudioManager !== 'undefined' && AudioManager.isInitialized) {
+            AudioManager.updateVolumes(userSettings.masterVolume, userSettings.sfxVolume, userSettings.musicVolume);
+        }
     });
 
     // FOV slider (debounced to prevent excessive updates while dragging)
@@ -3140,6 +3152,14 @@ function initThreeJS() {
 function initAudio() {
     DebugLog.log('Initializing audio system...', 'info');
     try {
+        // Initialize new AudioManager (handles context creation internally)
+        if (typeof AudioManager !== 'undefined') {
+            AudioManager.init().then(() => {
+                DebugLog.log('AudioManager initialized', 'success');
+            });
+        }
+
+        // Keep legacy audioContext for backward compatibility with existing code
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         DebugLog.log('Audio context created', 'success');
         initAmbientAudio();
@@ -11985,22 +12005,25 @@ function togglePause() {
 
 // ==================== AUDIO ====================
 function playSound(type, position = null) {
+    // Use new AudioManager if available (with improved procedural fallbacks)
+    if (typeof AudioManager !== 'undefined' && AudioManager.isInitialized) {
+        const options = position ? { position } : {};
+        AudioManager.play(type, options);
+        return;
+    }
+
+    // Legacy fallback if AudioManager not loaded
     if (!audioContext) return;
 
-    // Apply volume settings
     const volumeMultiplier = userSettings.masterVolume * userSettings.sfxVolume;
     if (volumeMultiplier <= 0) return;
 
     try {
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
-
-        // Master volume node
         const masterGain = audioContext.createGain();
         masterGain.gain.value = volumeMultiplier;
 
-        // 3D positional audio if position provided
-        let outputNode = gainNode;
         if (position && player) {
             const panner = audioContext.createPanner();
             panner.panningModel = 'HRTF';
@@ -12009,13 +12032,10 @@ function playSound(type, position = null) {
             panner.maxDistance = 50;
             panner.rolloffFactor = 1;
             panner.setPosition(position.x, position.y || 1, position.z);
-
-            // Update listener position
             const listener = audioContext.listener;
             listener.setPosition(player.position.x, player.position.y, player.position.z);
             const forward = camera.getWorldDirection(new THREE.Vector3());
             listener.setOrientation(forward.x, forward.y, forward.z, 0, 1, 0);
-
             gainNode.connect(masterGain);
             masterGain.connect(panner);
             panner.connect(audioContext.destination);
@@ -12026,127 +12046,43 @@ function playSound(type, position = null) {
 
         oscillator.connect(gainNode);
 
-        switch (type) {
-            case 'pistol':
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(180, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(60, audioContext.currentTime + 0.08);
-                gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.08);
-                break;
-            case 'smg':
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 0.05);
-                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
-                break;
-            case 'shotgun':
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(30, audioContext.currentTime + 0.2);
-                gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-                break;
-            case 'rocket':
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(80, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.1);
-                oscillator.frequency.exponentialRampToValueAtTime(40, audioContext.currentTime + 0.3);
-                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-                break;
-            case 'laser':
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.02);
-                oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.05);
-                gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
-                break;
-            case 'explosion':
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(60, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.4);
-                gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                break;
-            case 'grenadeThrow':
-                oscillator.type = 'square';
-                oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-                break;
-            case 'shoot': // fallback
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-                break;
-            case 'hit':
-                oscillator.type = 'square';
-                oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-                break;
-            case 'zombieAttack':
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(80, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(40, audioContext.currentTime + 0.3);
-                gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-                break;
-            case 'pickup':
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-                break;
-            case 'reload':
-                oscillator.type = 'square';
-                oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.05);
-                gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.08);
-                break;
-            case 'weaponSwitch':
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-                oscillator.frequency.setValueAtTime(400, audioContext.currentTime + 0.05);
-                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-                break;
-            case 'killStreak':
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(523, audioContext.currentTime);
-                oscillator.frequency.setValueAtTime(659, audioContext.currentTime + 0.1);
-                oscillator.frequency.setValueAtTime(784, audioContext.currentTime + 0.2);
-                gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-                break;
-            case 'lowHealth':
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
-                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                break;
-        }
+        // Basic legacy sound definitions (AudioManager has improved versions)
+        const sounds = {
+            pistol: { type: 'sawtooth', freq: [180, 60], dur: 0.08, vol: 0.25 },
+            smg: { type: 'sawtooth', freq: [200, 80], dur: 0.05, vol: 0.2 },
+            shotgun: { type: 'sawtooth', freq: [100, 30], dur: 0.2, vol: 0.4 },
+            rocket: { type: 'sawtooth', freq: [80, 40], dur: 0.3, vol: 0.5 },
+            laser: { type: 'sine', freq: [800, 600], dur: 0.05, vol: 0.15 },
+            explosion: { type: 'sawtooth', freq: [60, 20], dur: 0.5, vol: 0.6 },
+            grenadeThrow: { type: 'square', freq: [200, 100], dur: 0.15, vol: 0.2 },
+            shoot: { type: 'sawtooth', freq: [150, 50], dur: 0.1, vol: 0.3 },
+            hit: { type: 'square', freq: [200, 200], dur: 0.1, vol: 0.2 },
+            zombieAttack: { type: 'sawtooth', freq: [80, 40], dur: 0.3, vol: 0.15 },
+            pickup: { type: 'sine', freq: [440, 880], dur: 0.15, vol: 0.2 },
+            reload: { type: 'square', freq: [400, 100], dur: 0.08, vol: 0.15 },
+            weaponSwitch: { type: 'sine', freq: [300, 400], dur: 0.1, vol: 0.1 },
+            killStreak: { type: 'sine', freq: [523, 784], dur: 0.3, vol: 0.25 },
+            lowHealth: { type: 'sine', freq: [100, 100], dur: 0.5, vol: 0.1 }
+        };
+
+        const sound = sounds[type] || sounds.shoot;
+        oscillator.type = sound.type;
+        oscillator.frequency.setValueAtTime(sound.freq[0], audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(sound.freq[1], audioContext.currentTime + sound.dur);
+        gainNode.gain.setValueAtTime(sound.vol, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + sound.dur);
 
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.5);
 
-        // Clean up audio nodes when oscillator ends to prevent memory leaks
         oscillator.onended = () => {
             try {
                 oscillator.disconnect();
                 gainNode.disconnect();
                 masterGain.disconnect();
-            } catch (e) { /* Already disconnected - ignore */ }
+            } catch (e) {}
         };
-    } catch (e) { /* Audio error - silently ignore for user experience */ }
+    } catch (e) {}
 }
 
 // Play sound at a 3D position (for zombie attacks, pickups, etc.)

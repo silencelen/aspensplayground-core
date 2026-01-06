@@ -1,6 +1,6 @@
 // Service Worker for Aspen's Playground PWA
 // Update this version when deploying significant changes
-const CACHE_VERSION = 25;
+const CACHE_VERSION = 27;
 const CACHE_NAME = `aspens-playground-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
     '/game.js',
     '/modules/GameCore.js',
     '/modules/utils.js',
+    '/modules/AudioManager.js',
     '/manifest.json',
     '/privacy.html',
     '/terms.html',
