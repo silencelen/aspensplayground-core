@@ -176,7 +176,7 @@ jobs:
 
       - name: Create issue for breaking changes
         if: steps.breaking.outputs.has_breaking == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const breakingDetails = `${{ steps.breaking.outputs.breaking_details }}`;
@@ -250,7 +250,7 @@ jobs:
 
       - name: Add PR comment for breaking changes
         if: github.event_name == 'pull_request' && steps.breaking.outputs.has_breaking == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const breakingDetails = `${{ steps.breaking.outputs.breaking_details }}`;

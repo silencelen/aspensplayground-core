@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
@@ -127,7 +127,7 @@ jobs:
         run: npx eslint . --format json > eslint-results.json 2>&1 || true
 
       - name: Upload ESLint results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eslint-results
           path: eslint-results.json
