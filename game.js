@@ -11871,24 +11871,44 @@ function registerKill() {
 }
 
 function updatePlayerList() {
-    let listHtml = '';
-
-    // Add local player
-    if (localPlayerData) {
-        const color = sanitizeColor(localPlayerData.color || 0xffffff);
-        listHtml += `<div style="color: ${color}; margin: 2px 0;">● ${escapeHtml(localPlayerData.name)} (You)</div>`;
-    }
-
-    // Add remote players
-    remotePlayers.forEach((p, id) => {
-        const color = sanitizeColor(p.color || 0xffffff);
-        const status = p.isAlive ? '●' : '✗';
-        listHtml += `<div style="color: ${color}; margin: 2px 0; opacity: ${p.isAlive ? 1 : 0.5}">${status} ${escapeHtml(p.name)}</div>`;
-    });
-
     const playerList = document.getElementById('player-list');
     const playerCount = document.getElementById('player-count');
-    if (playerList) playerList.innerHTML = listHtml;
+
+    if (playerList) {
+        // Clear existing content safely
+        playerList.textContent = '';
+
+        // Helper to create a player row using safe DOM methods
+        const createPlayerRow = (name, color, status, opacity = 1) => {
+            const div = document.createElement('div');
+            div.style.color = sanitizeColor(color);
+            div.style.margin = '2px 0';
+            div.style.opacity = opacity;
+            div.textContent = `${status} ${name}`;
+            return div;
+        };
+
+        // Add local player
+        if (localPlayerData) {
+            playerList.appendChild(createPlayerRow(
+                localPlayerData.name + ' (You)',
+                localPlayerData.color || 0xffffff,
+                '●'
+            ));
+        }
+
+        // Add remote players
+        remotePlayers.forEach((p) => {
+            const status = p.isAlive ? '●' : '✗';
+            playerList.appendChild(createPlayerRow(
+                p.name,
+                p.color || 0xffffff,
+                status,
+                p.isAlive ? 1 : 0.5
+            ));
+        });
+    }
+
     if (playerCount) playerCount.textContent = `Players: ${remotePlayers.size + 1}`;
 }
 
