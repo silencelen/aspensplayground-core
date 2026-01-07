@@ -26,7 +26,7 @@ const AudioManager = {
     sounds: {
         // === WEAPONS ===
         pistol: {
-            src: 'sounds/weapons/pistol.wav',
+            src: 'sounds/weapons/pistol.ogg',
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
@@ -38,25 +38,25 @@ const AudioManager = {
             fallback: 'procedural'
         },
         shotgun: {
-            src: 'sounds/weapons/shotgun.wav',
+            src: 'sounds/weapons/shotgun.ogg',
             volume: 0.9,
             variations: 1,
             fallback: 'procedural'
         },
         rocket: {
-            src: 'sounds/weapons/rocket.mp3',
+            src: 'sounds/weapons/rocket.ogg',
             volume: 0.85,
             variations: 1,
             fallback: 'procedural'
         },
         laser: {
-            src: 'sounds/weapons/laser.mp3',
+            src: 'sounds/weapons/laser.ogg',
             volume: 0.6,
             variations: 1,
             fallback: 'procedural'
         },
         reload: {
-            src: 'sounds/weapons/reload.mp3',
+            src: 'sounds/weapons/reload.wav',
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
@@ -69,7 +69,7 @@ const AudioManager = {
         },
         // Generic shoot sound (used when weapon type is unknown)
         shoot: {
-            src: 'sounds/weapons/pistol.wav',
+            src: 'sounds/weapons/pistol.ogg',
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
@@ -83,13 +83,13 @@ const AudioManager = {
             fallback: 'procedural'
         },
         explosion: {
-            src: 'sounds/combat/explosion.mp3',
+            src: 'sounds/combat/explosion.ogg',
             volume: 0.9,
             variations: 1,
             fallback: 'procedural'
         },
         grenadeThrow: {
-            src: 'sounds/combat/grenade_throw.mp3',
+            src: 'sounds/combat/grenade_throw.wav',
             volume: 0.6,
             variations: 1,
             fallback: 'procedural'
