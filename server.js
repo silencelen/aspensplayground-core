@@ -1770,13 +1770,17 @@ NavGrid.buildFromObstacles(MAP_OBSTACLES.dining_hall);
 // ==================== MULTI-LOBBY SYSTEM ====================
 const ROOM_STATE = {
     QUEUING: 'queuing',
+    QUEUING_PRIVATE: 'queuing_private',
     PLAYING: 'playing',
-    GAME_OVER: 'game_over'
+    PLAYING_PRIVATE: 'playing_private',
+    GAME_OVER: 'game_over',
+    GAME_OVER_PRIVATE: 'game_over_private'
 };
 
 const gameRooms = new Map(); // roomId -> GameRoom
 const playerRooms = new Map(); // playerId -> roomId
 const roomlessPlayers = new Map(); // playerId -> { ws, name, cosmetic } - Players between games
+const playerLastPrivateRoom = new Map(); // playerId -> roomId - For private game-over rejoining
 
 // Map configuration - which map for which waves
 const WAVE_MAP_CONFIG = [
@@ -1807,7 +1811,7 @@ function createGameRoom() {
         wave: 1,
         zombiesRemaining: 0,
         zombiesSpawned: 0,
-        state: ROOM_STATE.QUEUING,    // New: unified state field
+        state: ROOM_STATE.QUEUING,    // Unified state field
         isRunning: false,             // Deprecated: kept for backward compatibility
         isInLobby: true,              // Deprecated: kept for backward compatibility
         isPaused: false,
@@ -1823,7 +1827,8 @@ function createGameRoom() {
         countdownSeconds: 0,
         gameLoopInterval: null,
         currentMapId: 'dining_hall',  // Track current map
-        bossMode: false               // Track boss mode state
+        bossMode: false,              // Track boss mode state
+        leaderId: null                // Player ID of the room leader (first to join)
     };
     gameRooms.set(roomId, room);
     log(`Created new game room: ${roomId}`, 'INFO');
@@ -1843,6 +1848,24 @@ function findOrCreateLobby() {
     return createGameRoom();
 }
 
+// Find a private room by its 6-character shortcode
+function findPrivateRoom(shortcode) {
+    const upper = shortcode.toUpperCase();
+    for (const [roomId, room] of gameRooms) {
+        if (roomId.substring(0, 6).toUpperCase() === upper) {
+            if (room.state === ROOM_STATE.QUEUING_PRIVATE ||
+                room.state === ROOM_STATE.PLAYING_PRIVATE ||
+                room.state === ROOM_STATE.GAME_OVER_PRIVATE) {
+                if (room.players.size < 8) {
+                    return room;
+                }
+                return { error: 'Room is full' };
+            }
+        }
+    }
+    return { error: 'Room not found' };
+}
+
 function getPlayerRoom(playerId) {
     const roomId = playerRooms.get(playerId);
     return roomId ? gameRooms.get(roomId) : null;
@@ -1859,6 +1882,21 @@ function cleanupEmptyRooms() {
             gameRooms.delete(roomId);
             log(`Removed empty room: ${roomId}`, 'INFO');
         }
+    }
+}
+// Get the current room leader (first player in Map = longest-tenured)
+function getRoomLeader(room) {
+    if (!room || room.players.size === 0) return null;
+    return room.players.keys().next().value;
+}
+
+// Update room leader and broadcast change if leader changed
+function updateRoomLeader(room) {
+    if (!room) return;
+    const newLeaderId = getRoomLeader(room);
+    if (newLeaderId !== room.leaderId) {
+        room.leaderId = newLeaderId;
+        broadcastToRoom(room, { type: 'leaderChange', leaderId: newLeaderId });
     }
 }
 
@@ -1881,6 +1919,9 @@ function removePlayerFromRoom(playerId, room) {
     // Remove from room but keep WebSocket open
     room.players.delete(playerId);
     playerRooms.delete(playerId);
+
+    // Update leader if needed
+    updateRoomLeader(room);
 
     // Track as roomless player
     roomlessPlayers.set(playerId, playerInfo);
@@ -1986,6 +2027,12 @@ function createPlayer(ws, id) {
 
     room.players.set(id, player);
     playerRooms.set(id, room.id);
+
+    // First player becomes the leader
+    if (room.players.size === 1) {
+        room.leaderId = id;
+    }
+
     log(`Player "${player.name}" joined (${room.players.size} players)`, 'PLAYER', room.id);
 
     return player;
@@ -2007,6 +2054,9 @@ function removePlayer(id) {
 
         room.players.delete(id);
         playerRooms.delete(id);
+
+        // Update leader if needed (next longest-tenured player)
+        updateRoomLeader(room);
 
         // Broadcast player left to room
         broadcastToRoom(room, {
@@ -3336,8 +3386,11 @@ function gameOverInRoom(room) {
     if (!room) return;
     log(`GAME OVER! Wave ${room.wave}, Score: ${room.totalScore}, Kills: ${room.totalKills}`, 'GAME', room.id);
 
-    // Set state to GAME_OVER before broadcasting
-    room.state = ROOM_STATE.GAME_OVER;
+    // Determine if this was a private game
+    const wasPrivate = room.state === ROOM_STATE.PLAYING_PRIVATE;
+
+    // Set appropriate game over state
+    room.state = wasPrivate ? ROOM_STATE.GAME_OVER_PRIVATE : ROOM_STATE.GAME_OVER;
     room.isRunning = false;  // Keep deprecated fields in sync
     room.isInLobby = false;
 
@@ -3347,11 +3400,20 @@ function gameOverInRoom(room) {
         wave: room.wave,
         totalKills: room.totalKills,
         totalScore: room.totalScore,
-        players: getPlayersDataFromRoom(room)
+        players: getPlayersDataFromRoom(room),
+        wasPrivate: wasPrivate,
+        shortcode: wasPrivate ? room.id.substring(0, 6).toUpperCase() : null
     });
 
     // Get player IDs before removing (to avoid iterator issues)
     const playerIds = Array.from(room.players.keys());
+
+    // For private rooms, store lastPrivateRoomId for each player before removing
+    if (wasPrivate) {
+        for (const playerId of playerIds) {
+            playerLastPrivateRoom.set(playerId, room.id);
+        }
+    }
 
     // Remove all players from room (they stay connected but roomless)
     for (const playerId of playerIds) {
@@ -3361,8 +3423,12 @@ function gameOverInRoom(room) {
     // Stop game timers and cleanup
     stopGameInRoom(room);
 
-    // Room will be cleaned up since it's now empty
-    cleanupEmptyRooms();
+    // For public rooms, clean up. For private, room persists for rejoining.
+    if (!wasPrivate) {
+        cleanupEmptyRooms();
+    } else {
+        log(`Private room preserved for rejoining (code: ${room.id.substring(0, 6).toUpperCase()})`, 'LOBBY', room.id);
+    }
 }
 
 function resetGame() {
@@ -3500,10 +3566,15 @@ function broadcastLobbyUpdateToRoom(room) {
         });
     });
 
+    const isPrivate = room.state === ROOM_STATE.QUEUING_PRIVATE || room.state === ROOM_STATE.PLAYING_PRIVATE;
+
     broadcastToRoom(room, {
         type: 'lobbyUpdate',
         players: lobbyPlayers,
-        allReady: checkAllReadyInRoom(room)
+        allReady: checkAllReadyInRoom(room),
+        leaderId: room.leaderId,
+        isPrivate: isPrivate,
+        shortcode: room.id.substring(0, 6).toUpperCase()
     });
 }
 
@@ -3625,8 +3696,9 @@ function cancelLobbyCountdownInRoom(room) {
 function startMultiplayerGameInRoom(room) {
     if (!room) return;
 
-    // Set state to PLAYING
-    room.state = ROOM_STATE.PLAYING;
+    // Set state to PLAYING (preserve private flag)
+    const wasPrivate = room.state === ROOM_STATE.QUEUING_PRIVATE;
+    room.state = wasPrivate ? ROOM_STATE.PLAYING_PRIVATE : ROOM_STATE.PLAYING;
     room.isInLobby = false;  // Keep deprecated fields in sync
     room.isRunning = true;
     room.isPaused = false;
@@ -3976,6 +4048,12 @@ function handleMessage(playerId, message) {
         return;
     }
 
+    // Handle joinPrivate - player joining via shortcode (may not have a room yet)
+    if (message.type === 'joinPrivate') {
+        handleJoinPrivate(playerId, message.shortcode);
+        return;
+    }
+
     const room = getPlayerRoom(playerId);
     if (!room) return;
 
@@ -3987,6 +4065,10 @@ function handleMessage(playerId, message) {
             if (typeof message.isReady === 'boolean') {
                 setPlayerReady(playerId, message.isReady);
             }
+            break;
+
+        case 'togglePrivate':
+            handleTogglePrivate(playerId, room);
             break;
 
         case 'update':
@@ -4181,6 +4263,246 @@ function handleMessage(playerId, message) {
     }
 }
 
+// ==================== PRIVATE LOBBY HANDLERS ====================
+
+// Handle leader toggling room between public and private
+function handleTogglePrivate(playerId, room) {
+    // Only leader can toggle
+    if (room.leaderId !== playerId) {
+        log(`Non-leader ${playerId} tried to toggle private`, 'WARN', room.id);
+        return;
+    }
+
+    // Only allow toggling in lobby state
+    if (room.state !== ROOM_STATE.QUEUING && room.state !== ROOM_STATE.QUEUING_PRIVATE) {
+        log(`Cannot toggle private in state: ${room.state}`, 'WARN', room.id);
+        return;
+    }
+
+    if (room.state === ROOM_STATE.QUEUING) {
+        // Public → Private
+        room.state = ROOM_STATE.QUEUING_PRIVATE;
+        const shortcode = room.id.substring(0, 6).toUpperCase();
+        log(`Room made PRIVATE (code: ${shortcode})`, 'LOBBY', room.id);
+        broadcastToRoom(room, {
+            type: 'roomPrivacyChange',
+            isPrivate: true,
+            shortcode: shortcode
+        });
+        broadcastLobbyUpdateToRoom(room);
+    } else {
+        // Private → Public: kick all players via playAgain flow
+        log(`Room made PUBLIC - kicking all players`, 'LOBBY', room.id);
+        broadcastToRoom(room, { type: 'privateDisabled' });
+
+        // Remove all players from room (they become roomless)
+        const playerIds = Array.from(room.players.keys());
+        for (const pid of playerIds) {
+            removePlayerFromRoom(pid, room);
+        }
+
+        // Clean up the now-empty room
+        cleanupEmptyRooms();
+    }
+}
+
+// Handle joining a private room via shortcode
+function handleJoinPrivate(playerId, shortcode) {
+    // Validate shortcode
+    if (!shortcode || typeof shortcode !== 'string' || shortcode.length !== 6) {
+        sendToPlayer(playerId, { type: 'joinPrivateError', error: 'Invalid shortcode format' });
+        return;
+    }
+
+    // Check if player is already in a room
+    const existingRoom = getPlayerRoom(playerId);
+    if (existingRoom) {
+        // Allow moving from public QUEUING lobby to private
+        if (existingRoom.state === ROOM_STATE.QUEUING) {
+            log(`Player ${playerId} leaving public lobby to join private`, 'PLAYER', existingRoom.id);
+            removePlayerFromRoom(playerId, existingRoom);
+        } else {
+            sendToPlayer(playerId, { type: 'joinPrivateError', error: 'Cannot leave current game' });
+            return;
+        }
+    }
+
+    // Find the private room
+    const result = findPrivateRoom(shortcode);
+    if (result.error) {
+        sendToPlayer(playerId, { type: 'joinPrivateError', error: result.error });
+        return;
+    }
+
+    const room = result;
+
+    // Check if in game-over state, reset if so
+    if (room.state === ROOM_STATE.GAME_OVER_PRIVATE) {
+        resetPrivateRoomForNewGame(room);
+    }
+
+    // Get player info (may be roomless or fresh connection)
+    const roomlessInfo = roomlessPlayers.get(playerId);
+    const ws = roomlessInfo ? roomlessInfo.ws : wsToPlayerId.get(playerId);
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log(`Join private failed - invalid websocket for ${playerId}`, 'WARN');
+        return;
+    }
+
+    // Create player and add to room
+    const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff, 0xff8844, 0x88ff44];
+    const playerNum = room.players.size;
+
+    const player = {
+        id: playerId,
+        name: roomlessInfo?.name || `Player ${playerNum + 1}`,
+        ws: ws,
+        roomId: room.id,
+        position: { x: (Math.random() - 0.5) * 10, y: 1.8, z: 10 + Math.random() * 5 },
+        rotation: { x: 0, y: 0 },
+        health: 100,
+        isAlive: true,
+        isReady: false,
+        color: colors[playerNum % colors.length],
+        cosmetic: roomlessInfo?.cosmetic || 'default',
+        currentWeapon: 'pistol',
+        lastUpdate: Date.now(),
+        kills: 0,
+        score: 0
+    };
+
+    room.players.set(playerId, player);
+    playerRooms.set(playerId, room.id);
+
+    // First player becomes leader
+    if (room.players.size === 1) {
+        room.leaderId = playerId;
+    }
+
+    // Remove from roomless tracking if applicable
+    roomlessPlayers.delete(playerId);
+
+    log(`Player "${player.name}" joined private room via shortcode (code: ${shortcode.toUpperCase()})`, 'PLAYER', room.id);
+
+    // Send init message
+    const isPrivate = room.state === ROOM_STATE.QUEUING_PRIVATE || room.state === ROOM_STATE.PLAYING_PRIVATE;
+    const initMessage = {
+        type: 'init',
+        playerId: playerId,
+        roomId: room.id,
+        player: {
+            id: player.id,
+            name: player.name,
+            position: player.position,
+            rotation: player.rotation,
+            health: player.health,
+            isAlive: player.isAlive,
+            isReady: player.isReady,
+            color: player.color,
+            cosmetic: player.cosmetic
+        },
+        gameState: {
+            isRunning: room.state === ROOM_STATE.PLAYING || room.state === ROOM_STATE.PLAYING_PRIVATE,
+            isInLobby: room.state === ROOM_STATE.QUEUING || room.state === ROOM_STATE.QUEUING_PRIVATE,
+            wave: room.wave,
+            zombiesRemaining: room.zombiesRemaining,
+            totalKills: room.totalKills,
+            totalScore: room.totalScore
+        },
+        players: getPlayersDataFromRoom(room).filter(p => p.id !== playerId),
+        zombies: getZombiesDataFromRoom(room),
+        pickups: getPickupsDataFromRoom(room),
+        leaderId: room.leaderId,
+        isPrivate: isPrivate,
+        shortcode: room.id.substring(0, 6).toUpperCase()
+    };
+
+    try {
+        ws.send(JSON.stringify(initMessage));
+    } catch (e) {
+        log(`Error sending init to ${playerId}: ${e.message}`, 'ERROR');
+    }
+
+    // Notify other players
+    broadcastLobbyUpdateToRoom(room);
+    broadcastToRoom(room, {
+        type: 'playerJoined',
+        player: {
+            id: player.id,
+            name: player.name,
+            position: player.position,
+            rotation: player.rotation,
+            health: player.health,
+            isAlive: player.isAlive,
+            isReady: player.isReady,
+            color: player.color,
+            cosmetic: player.cosmetic
+        }
+    }, playerId);
+}
+
+// Helper to send message to specific player by ID
+function sendToPlayer(playerId, message) {
+    const room = getPlayerRoom(playerId);
+    if (room) {
+        const player = room.players.get(playerId);
+        if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
+            try {
+                player.ws.send(JSON.stringify(message));
+            } catch (e) {
+                log(`Error sending to ${playerId}: ${e.message}`, 'ERROR');
+            }
+        }
+    } else {
+        // Check roomless players
+        const roomlessInfo = roomlessPlayers.get(playerId);
+        if (roomlessInfo && roomlessInfo.ws && roomlessInfo.ws.readyState === WebSocket.OPEN) {
+            try {
+                roomlessInfo.ws.send(JSON.stringify(message));
+            } catch (e) {
+                log(`Error sending to roomless ${playerId}: ${e.message}`, 'ERROR');
+            }
+        }
+    }
+}
+
+// Reset a private room for a new game (when first player rejoins after game over)
+function resetPrivateRoomForNewGame(room) {
+    room.state = ROOM_STATE.QUEUING_PRIVATE;
+    room.isRunning = false;
+    room.isInLobby = true;
+    room.wave = 1;
+    room.zombiesRemaining = 0;
+    room.zombiesSpawned = 0;
+    room.totalKills = 0;
+    room.totalScore = 0;
+    room.zombies.clear();
+    room.pickups.clear();
+    room.currentMapId = 'dining_hall';
+    room.bossMode = false;
+
+    // Clear any lingering timers
+    if (room.spawnInterval) {
+        clearInterval(room.spawnInterval);
+        room.spawnInterval = null;
+    }
+    if (room.countdownTimer) {
+        clearInterval(room.countdownTimer);
+        room.countdownTimer = null;
+    }
+    if (room.gameLoopInterval) {
+        clearInterval(room.gameLoopInterval);
+        room.gameLoopInterval = null;
+    }
+    if (room.shopTimeout) {
+        clearTimeout(room.shopTimeout);
+        room.shopTimeout = null;
+    }
+
+    log(`Private room reset for new game (code: ${room.id.substring(0, 6).toUpperCase()})`, 'LOBBY', room.id);
+}
+
 // ==================== PLAY AGAIN HANDLER ====================
 // Handles rejoining after game over (player is roomless)
 function handlePlayAgainRequest(playerId) {
@@ -4190,8 +4512,33 @@ function handlePlayAgainRequest(playerId) {
         return;
     }
 
-    // Find or create a queuing room
-    const room = findOrCreateLobby();
+    // Check if player was in a private room
+    const lastPrivateRoomId = playerLastPrivateRoom.get(playerId);
+    let room = null;
+
+    if (lastPrivateRoomId) {
+        const privateRoom = gameRooms.get(lastPrivateRoomId);
+        if (privateRoom && privateRoom.players.size < 8) {
+            // Rejoin private room
+            room = privateRoom;
+
+            // Reset room state to queuing if needed
+            if (room.state === ROOM_STATE.GAME_OVER_PRIVATE) {
+                resetPrivateRoomForNewGame(room);
+            }
+
+            playerLastPrivateRoom.delete(playerId);
+            log(`Player rejoining private room (code: ${room.id.substring(0, 6).toUpperCase()})`, 'PLAYER', room.id);
+        } else {
+            // Room gone or full - clear tracking
+            playerLastPrivateRoom.delete(playerId);
+        }
+    }
+
+    // Fall through to public queue if no private room
+    if (!room) {
+        room = findOrCreateLobby();
+    }
 
     // Get colors for the new player
     const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff, 0xff8844, 0x88ff44];
@@ -4219,6 +4566,11 @@ function handlePlayAgainRequest(playerId) {
     // Add player to room
     room.players.set(playerId, player);
     playerRooms.set(playerId, room.id);
+
+    // First player becomes leader
+    if (room.players.size === 1) {
+        room.leaderId = playerId;
+    }
 
     // Remove from roomless tracking
     roomlessPlayers.delete(playerId);
@@ -4251,7 +4603,10 @@ function handlePlayAgainRequest(playerId) {
         },
         players: getPlayersDataFromRoom(room).filter(p => p.id !== playerId),
         zombies: getZombiesDataFromRoom(room),
-        pickups: getPickupsDataFromRoom(room)
+        pickups: getPickupsDataFromRoom(room),
+        leaderId: room.leaderId,
+        isPrivate: room.state === ROOM_STATE.QUEUING_PRIVATE,
+        shortcode: room.id.substring(0, 6).toUpperCase()
     };
 
     try {

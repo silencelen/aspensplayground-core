@@ -952,6 +952,178 @@
             letter-spacing: 1px;
         }
 
+        .lobby-id.private {
+            color: #ff8c00;
+        }
+
+        /* Private Lobby Indicator */
+        .private-indicator {
+            background: linear-gradient(135deg, rgba(255, 102, 0, 0.2) 0%, rgba(204, 85, 0, 0.2) 100%);
+            border: 2px solid #ff6600;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin: 15px auto;
+            max-width: 350px;
+            text-align: center;
+            animation: privateGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes privateGlow {
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 102, 0, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(255, 102, 0, 0.6); }
+        }
+
+        .private-badge {
+            color: #ff6600;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(255, 102, 0, 0.5);
+        }
+
+        .private-code-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .private-code-label {
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .private-code {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            background: #111;
+            padding: 8px 15px;
+            border-radius: 5px;
+            letter-spacing: 4px;
+            border: 1px solid #ff6600;
+        }
+
+        .copy-code-btn {
+            background: linear-gradient(135deg, #ff6600 0%, #cc5500 100%);
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .copy-code-btn:hover {
+            background: linear-gradient(135deg, #ff7722 0%, #dd6611 100%);
+            transform: scale(1.05);
+        }
+
+        .copy-code-btn:focus {
+            outline: 2px solid yellow;
+            outline-offset: 2px;
+        }
+
+        .copy-code-btn.copied {
+            background: linear-gradient(135deg, #44cc44 0%, #33aa33 100%);
+        }
+
+        /* Leader badge */
+        .leader-badge {
+            color: gold;
+            margin-left: 5px;
+            font-size: 14px;
+        }
+
+        .lobby-player.leader {
+            border-left: 3px solid gold;
+            padding-left: 10px;
+        }
+
+        /* Private toggle button */
+        #private-toggle {
+            background: linear-gradient(135deg, #444 0%, #333 100%);
+        }
+
+        #private-toggle.active {
+            background: linear-gradient(135deg, #ff6600 0%, #cc5500 100%);
+            box-shadow: 0 0 15px rgba(255, 102, 0, 0.5);
+        }
+
+        /* Join Private Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #cc0000;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-title {
+            color: #cc0000;
+            font-size: 24px;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px rgba(204, 0, 0, 0.5);
+        }
+
+        .modal-description {
+            color: #aaa;
+            margin-bottom: 20px;
+        }
+
+        .shortcode-input {
+            width: 180px;
+            padding: 15px;
+            font-size: 24px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            background: #111;
+            border: 2px solid #444;
+            border-radius: 5px;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+
+        .shortcode-input:focus {
+            outline: none;
+            border-color: #cc0000;
+            box-shadow: 0 0 10px rgba(204, 0, 0, 0.3);
+        }
+
+        .modal-error {
+            color: #ff4444;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
         #lobby-players {
             background: rgba(0, 0, 0, 0.6);
             border: 2px solid #8b0000;
@@ -3006,6 +3178,7 @@
         <div class="mode-buttons" role="group" aria-label="Game mode selection">
             <button class="menu-button mode-button" id="singleplayer-button" aria-label="Start single player game">SINGLE PLAYER</button>
             <button class="menu-button mode-button" id="multiplayer-button" aria-label="Start multiplayer game">MULTIPLAYER</button>
+            <button class="menu-button mode-button secondary" id="join-private-button" aria-label="Join private lobby with code">JOIN PRIVATE</button>
         </div>
         <div class="menu-buttons-corner">
             <button class="menu-button cosmetics-button" id="cosmetics-button" aria-label="Open character customization">COSMETICS</button>
@@ -3233,6 +3406,14 @@
         <h2 class="menu-title" id="lobby-title">MULTIPLAYER LOBBY</h2>
         <div class="menu-subtitle">Waiting for players...</div>
         <div id="lobby-id" class="lobby-id">Lobby: ------</div>
+        <div id="private-lobby-indicator" class="private-indicator" style="display: none;">
+            <div class="private-badge">🔒 PRIVATE LOBBY</div>
+            <div class="private-code-container">
+                <span class="private-code-label">Share this code:</span>
+                <span id="private-code-display" class="private-code">------</span>
+                <button id="copy-code-button" class="copy-code-btn" aria-label="Copy lobby code">COPY</button>
+            </div>
+        </div>
         <div id="lobby-players" role="list" aria-label="Players in lobby">
             <div class="lobby-header">PLAYERS</div>
             <div id="lobby-player-list"></div>
@@ -3240,6 +3421,7 @@
         <div id="lobby-status" aria-live="polite">Connecting to server...</div>
         <div class="lobby-buttons">
             <button class="menu-button" id="ready-button" disabled aria-label="Toggle ready status">READY</button>
+            <button class="menu-button" id="private-toggle" style="display: none;" aria-label="Toggle private lobby">MAKE PRIVATE</button>
             <button class="menu-button secondary" id="leave-lobby-button" aria-label="Leave lobby and return to menu">BACK</button>
         </div>
     </div>
@@ -5014,5 +5196,20 @@
         }
     })();
     </script>
+
+    <!-- Join Private Lobby Modal -->
+    <div id="join-private-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="join-private-title">
+        <div class="modal-content">
+            <h2 class="modal-title" id="join-private-title">JOIN PRIVATE LOBBY</h2>
+            <p class="modal-description">Enter the 6-character lobby code</p>
+            <input type="text" id="private-shortcode-input" class="shortcode-input" maxlength="6" placeholder="XXXXXX" autocomplete="off" aria-label="Enter lobby code">
+            <div id="join-private-error" class="modal-error" style="display: none;"></div>
+            <div class="modal-buttons">
+                <button class="menu-button" id="join-private-confirm">JOIN</button>
+                <button class="menu-button secondary" id="join-private-cancel">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

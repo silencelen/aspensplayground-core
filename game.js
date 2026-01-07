@@ -904,7 +904,11 @@ const GameState = {
 const LobbyState = {
     players: new Map(),
     allReady: false,
-    roomId: null
+    roomId: null,
+    leaderId: null,
+    isPrivate: false,
+    shortcode: '',
+    isLeader: false  // Convenience: localPlayerId === leaderId
 };
 
 // ==================== OPTIMIZATION SYSTEMS ====================
@@ -4291,6 +4295,17 @@ function connectToServer() {
         // Send cosmetic selection to server
         sendToServer({ type: 'setCosmetic', cosmetic: selectedCosmetic });
 
+        // Handle pending private join (if user came from Join Private modal)
+        if (typeof pendingPrivateJoin !== 'undefined' && pendingPrivateJoin) {
+            const shortcode = pendingPrivateJoin;
+            pendingPrivateJoin = null;
+            DebugLog.log(`Joining private lobby: ${shortcode}`, 'net');
+            sendToServer({
+                type: 'joinPrivate',
+                shortcode: shortcode
+            });
+        }
+
         // Start latency tracking
         startPingInterval();
     };
@@ -4448,6 +4463,22 @@ function handleServerMessage(message) {
 
         case 'lobbyCountdown':
             handleLobbyCountdown(message);
+            break;
+
+        case 'leaderChange':
+            handleLeaderChange(message);
+            break;
+
+        case 'roomPrivacyChange':
+            handleRoomPrivacyChange(message);
+            break;
+
+        case 'privateDisabled':
+            handlePrivateDisabled();
+            break;
+
+        case 'joinPrivateError':
+            handleJoinPrivateError(message);
             break;
 
         case 'playerJoined':
@@ -4649,11 +4680,11 @@ function handleInit(message) {
     // Store and display room/lobby ID
     if (message.roomId) {
         LobbyState.roomId = message.roomId;
-        const lobbyIdEl = document.getElementById('lobby-id');
-        if (lobbyIdEl) {
-            // Show first 6 characters of the room ID for readability
-            lobbyIdEl.textContent = `Lobby: ${message.roomId.substring(0, 6).toUpperCase()}`;
-        }
+        LobbyState.leaderId = message.leaderId || null;
+        LobbyState.isPrivate = message.isPrivate || false;
+        LobbyState.shortcode = message.shortcode || message.roomId.substring(0, 6).toUpperCase();
+        LobbyState.isLeader = (localPlayerId === LobbyState.leaderId);
+        updateLeaderUI();
     }
 
     DebugLog.log(`Initialized as ${localPlayerData.name} (${localPlayerId})`, 'success');
@@ -4806,6 +4837,19 @@ function handleLobbyUpdate(message) {
     });
     LobbyState.allReady = message.allReady;
 
+    // Update leader/private state
+    if (message.leaderId !== undefined) {
+        LobbyState.leaderId = message.leaderId;
+        LobbyState.isLeader = (localPlayerId === message.leaderId);
+    }
+    if (message.isPrivate !== undefined) {
+        LobbyState.isPrivate = message.isPrivate;
+    }
+    if (message.shortcode) {
+        LobbyState.shortcode = message.shortcode;
+    }
+
+    updateLeaderUI();
     updateLobbyPlayerList();
 }
 
@@ -4820,6 +4864,127 @@ function handleLobbyCountdown(message) {
     }
 }
 
+// Handle leader change (when leader leaves or is transferred)
+function handleLeaderChange(message) {
+    LobbyState.leaderId = message.leaderId;
+    LobbyState.isLeader = (localPlayerId === message.leaderId);
+    DebugLog.log(`New leader: ${message.leaderId} (you: ${LobbyState.isLeader})`, 'net');
+    updateLeaderUI();
+    updateLobbyPlayerList();
+}
+
+// Handle room privacy change (public <-> private)
+function handleRoomPrivacyChange(message) {
+    LobbyState.isPrivate = message.isPrivate;
+    if (message.shortcode) {
+        LobbyState.shortcode = message.shortcode;
+    }
+    DebugLog.log(`Room is now ${message.isPrivate ? 'PRIVATE' : 'PUBLIC'}`, 'net');
+    updateLeaderUI();
+
+    // Show notification
+    const lobbyStatus = document.getElementById('lobby-status');
+    if (lobbyStatus) {
+        if (message.isPrivate) {
+            lobbyStatus.textContent = `Lobby is now PRIVATE (Code: ${LobbyState.shortcode})`;
+        } else {
+            lobbyStatus.textContent = 'Lobby is now PUBLIC';
+        }
+    }
+}
+
+// Handle private lobby disabled (leader made public - all players kicked)
+function handlePrivateDisabled() {
+    DebugLog.log('Private lobby disabled - returning to menu', 'net');
+
+    // Show message and return to multiplayer lobby (fresh join)
+    const lobbyStatus = document.getElementById('lobby-status');
+    if (lobbyStatus) {
+        lobbyStatus.textContent = 'Private lobby closed - rejoining...';
+    }
+
+    // Trigger playAgain to rejoin public queue
+    setTimeout(() => {
+        sendToServer({ type: 'playAgain' });
+    }, 1000);
+}
+
+// Handle join private error
+function handleJoinPrivateError(message) {
+    const errorText = message.error || 'Failed to join private lobby';
+    DebugLog.log(`Join private error: ${errorText}`, 'error');
+
+    // Show the modal again with the error
+    const modal = document.getElementById('join-private-modal');
+    const errorEl = document.getElementById('join-private-error');
+    const input = document.getElementById('private-shortcode-input');
+
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+    if (errorEl) {
+        errorEl.textContent = errorText;
+        errorEl.style.display = 'block';
+    }
+    if (input) {
+        input.focus();
+        input.select();
+    }
+
+    // Clear pending join
+    if (typeof pendingPrivateJoin !== 'undefined') {
+        pendingPrivateJoin = null;
+    }
+    DebugLog.log(`Join private error: ${message.error}`, 'error');
+}
+
+// Update leader UI elements (private toggle, lobby ID display)
+function updatePrivateIndicator() {
+    const indicator = document.getElementById('private-lobby-indicator');
+    const codeDisplay = document.getElementById('private-code-display');
+
+    if (indicator) {
+        if (LobbyState.isPrivate) {
+            indicator.style.display = 'block';
+            if (codeDisplay) {
+                codeDisplay.textContent = LobbyState.shortcode || '------';
+            }
+        } else {
+            indicator.style.display = 'none';
+        }
+    }
+}
+
+function updateLeaderUI() {
+    // Update private toggle visibility (only leader sees it)
+    const privateToggle = document.getElementById('private-toggle');
+    if (privateToggle) {
+        privateToggle.style.display = LobbyState.isLeader ? 'block' : 'none';
+        privateToggle.textContent = LobbyState.isPrivate ? 'MAKE PUBLIC' : 'MAKE PRIVATE';
+        if (LobbyState.isPrivate) {
+            privateToggle.classList.add('active');
+        } else {
+            privateToggle.classList.remove('active');
+        }
+    }
+
+    // Update lobby ID display
+    const lobbyIdEl = document.getElementById('lobby-id');
+    if (lobbyIdEl) {
+        lobbyIdEl.textContent = `Lobby: ${LobbyState.shortcode}`;
+        if (LobbyState.isPrivate) {
+            lobbyIdEl.classList.add('private');
+            lobbyIdEl.title = 'Private lobby - share this code with friends';
+        } else {
+            lobbyIdEl.classList.remove('private');
+            lobbyIdEl.title = '';
+        }
+    }
+
+    // Update private indicator for all players
+    updatePrivateIndicator();
+}
+
 function updateLobbyPlayerList() {
     const listEl = document.getElementById('lobby-player-list');
     if (!listEl) return;
@@ -4828,10 +4993,12 @@ function updateLobbyPlayerList() {
 
     LobbyState.players.forEach((player, id) => {
         const div = document.createElement('div');
-        div.className = 'lobby-player' + (player.isReady ? ' ready' : '') + (id === localPlayerId ? ' you' : '');
+        const isLeader = (id === LobbyState.leaderId);
+        div.className = 'lobby-player' + (player.isReady ? ' ready' : '') + (id === localPlayerId ? ' you' : '') + (isLeader ? ' leader' : '');
 
+        const leaderBadge = isLeader ? '<span class="leader-badge" title="Room Leader">★</span>' : '';
         div.innerHTML = `
-            <span class="player-name">${escapeHtml(player.name)}</span>
+            <span class="player-name">${escapeHtml(player.name)}${leaderBadge}</span>
             <span class="player-status ${player.isReady ? 'ready' : 'waiting'}">${player.isReady ? 'READY' : 'Waiting...'}</span>
         `;
 
@@ -14965,6 +15132,91 @@ function initEventListeners() {
         if (popup) popup.style.display = 'none';
     }
 
+    // Join private modal functions
+    function showJoinPrivateModal() {
+        const modal = document.getElementById('join-private-modal');
+        const input = document.getElementById('private-shortcode-input');
+        const errorEl = document.getElementById('join-private-error');
+
+        if (modal && input) {
+            input.value = '';
+            if (errorEl) errorEl.style.display = 'none';
+            modal.style.display = 'flex';
+            setTimeout(() => input.focus(), 100);
+        }
+    }
+
+    function hideJoinPrivateModal() {
+        const modal = document.getElementById('join-private-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // Variable to track pending private join (for after socket connects)
+    let pendingPrivateJoin = null;
+
+    function submitJoinPrivate() {
+        const input = document.getElementById('private-shortcode-input');
+        const errorEl = document.getElementById('join-private-error');
+
+        if (!input) return;
+
+        const shortcode = input.value.trim().toUpperCase();
+
+        // Validate shortcode
+        if (shortcode.length !== 6) {
+            if (errorEl) {
+                errorEl.textContent = 'Code must be 6 characters';
+                errorEl.style.display = 'block';
+            }
+            return;
+        }
+
+        if (!/^[A-Z0-9]+$/.test(shortcode)) {
+            if (errorEl) {
+                errorEl.textContent = 'Code must be letters and numbers only';
+                errorEl.style.display = 'block';
+            }
+            return;
+        }
+
+        // Clear error
+        if (errorEl) errorEl.style.display = 'none';
+
+        // Get player name (prompt if needed)
+        let playerName = localStorage.getItem('playerName');
+        if (!playerName) {
+            // Use name popup first
+            pendingPrivateJoin = shortcode;
+            hideJoinPrivateModal();
+            showNamePopup('joinPrivate');
+            return;
+        }
+
+        // Connect and join private
+        connectToPrivateLobby(shortcode, playerName);
+    }
+
+    function connectToPrivateLobby(shortcode, playerName) {
+        hideJoinPrivateModal();
+
+        // Connect to server if not connected
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            pendingPrivateJoin = shortcode;
+            connectToServer();
+            return;
+        }
+
+        // Already connected - send join request
+        sendToServer({
+            type: 'joinPrivate',
+            shortcode: shortcode
+        });
+
+        // Show lobby screen
+        setElementDisplay('start-screen', 'none');
+        setElementDisplay('lobby-screen', 'flex');
+    }
+
     function confirmNameAndStart() {
         const popup = document.getElementById('name-popup');
         const input = document.getElementById('name-popup-input');
@@ -14999,6 +15251,61 @@ function initEventListeners() {
     // Multiplayer button - go to lobby
     document.getElementById('multiplayer-button')?.addEventListener('click', () => {
         showNamePopup('multiplayer');
+    });
+
+    // Copy code button
+    const copyCodeBtn = document.getElementById('copy-code-button');
+    if (copyCodeBtn) {
+        copyCodeBtn.addEventListener('click', function() {
+            const code = LobbyState.shortcode || '';
+            if (code && navigator.clipboard) {
+                navigator.clipboard.writeText(code).then(() => {
+                    this.textContent = 'COPIED!';
+                    this.classList.add('copied');
+                    setTimeout(() => {
+                        this.textContent = 'COPY';
+                        this.classList.remove('copied');
+                    }, 2000);
+                }).catch(() => {
+                    // Fallback for older browsers
+                    this.textContent = code;
+                    this.select && this.select();
+                });
+            }
+        });
+    }
+
+    // Join private button - show modal
+    document.getElementById('join-private-button')?.addEventListener('click', () => {
+        showJoinPrivateModal();
+    });
+
+    // Private toggle button - toggle room privacy
+    document.getElementById('private-toggle')?.addEventListener('click', () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            DebugLog.log('Cannot toggle private: not connected', 'error');
+            return;
+        }
+        sendToServer({ type: 'togglePrivate' });
+    });
+
+    // Join private modal - confirm button
+    document.getElementById('join-private-confirm')?.addEventListener('click', () => {
+        submitJoinPrivate();
+    });
+
+    // Join private modal - cancel button
+    document.getElementById('join-private-cancel')?.addEventListener('click', () => {
+        hideJoinPrivateModal();
+    });
+
+    // Join private modal - Enter key to submit
+    document.getElementById('private-shortcode-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            submitJoinPrivate();
+        } else if (e.key === 'Escape') {
+            hideJoinPrivateModal();
+        }
     });
 
     // Name popup confirm button
