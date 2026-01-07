@@ -903,7 +903,8 @@ const GameState = {
 // Lobby state
 const LobbyState = {
     players: new Map(),
-    allReady: false
+    allReady: false,
+    roomId: null
 };
 
 // ==================== OPTIMIZATION SYSTEMS ====================
@@ -4645,6 +4646,16 @@ function handleInit(message) {
     localPlayerData = message.player;
     sessionToken = message.sessionToken;  // Store session token for authenticated actions
 
+    // Store and display room/lobby ID
+    if (message.roomId) {
+        LobbyState.roomId = message.roomId;
+        const lobbyIdEl = document.getElementById('lobby-id');
+        if (lobbyIdEl) {
+            // Show first 6 characters of the room ID for readability
+            lobbyIdEl.textContent = `Lobby: ${message.roomId.substring(0, 6).toUpperCase()}`;
+        }
+    }
+
     DebugLog.log(`Initialized as ${localPlayerData.name} (${localPlayerId})`, 'success');
 
     // Set initial position
@@ -4658,6 +4669,13 @@ function handleInit(message) {
     playerState.health = localPlayerData.health || CONFIG.player.maxHealth;
     playerState.isAlive = true;
 
+    // Clear old lobby state and remote player meshes (important for playAgain)
+    LobbyState.players.clear();
+    remotePlayerMeshes.forEach((mesh, id) => {
+        scene.remove(mesh);
+    });
+    remotePlayerMeshes.clear();
+
     // Add local player to lobby state first
     LobbyState.players.set(localPlayerId, {
         id: localPlayerId,
@@ -4667,7 +4685,7 @@ function handleInit(message) {
         cosmetic: localPlayerData.cosmetic || selectedCosmetic
     });
 
-    // Add existing players to lobby state
+    // Add existing players from the new room
     if (Array.isArray(message.players)) {
         message.players.forEach(p => {
             LobbyState.players.set(p.id, p);
@@ -4679,12 +4697,25 @@ function handleInit(message) {
     if (message.gameState.isInLobby) {
         GameState.isInLobby = true;
         GameState.isRunning = false;
+        GameState.isGameOver = false;  // Clear game over state
         GameState.isReady = localPlayerData.isReady || false;
 
-        // Enable ready button
+        // Show lobby screen, hide other screens (important for playAgain flow)
+        setElementDisplay('lobby-screen', 'flex');
+        setElementDisplay('start-screen', 'none');
+        setElementDisplay('game-over-screen', 'none');
+        setElementDisplay('hud', 'none');
+        setElementDisplay('crosshair', 'none');
+        setElementDisplay('multiplayer-panel', 'none');
+
+        // Enable ready button and reset its state
         const readyBtn = document.getElementById('ready-button');
         const lobbyStatus = document.getElementById('lobby-status');
-        if (readyBtn) readyBtn.disabled = false;
+        if (readyBtn) {
+            readyBtn.disabled = false;
+            readyBtn.textContent = 'READY';
+            readyBtn.classList.remove('ready');
+        }
         if (lobbyStatus) lobbyStatus.textContent = 'Press READY when you want to start!';
 
         // Update lobby player list
@@ -4700,6 +4731,11 @@ function handleInit(message) {
                 localLobbyPlayer.name = savedName;
                 updateLobbyPlayerList();
             }
+        }
+
+        // Send cosmetic preference to server
+        if (selectedCosmetic && selectedCosmetic !== 'default') {
+            sendToServer({ type: 'setCosmetic', cosmetic: selectedCosmetic });
         }
 
         DebugLog.log('Connected to lobby', 'net');
@@ -5862,8 +5898,9 @@ function handleGameReset() {
 }
 
 // Return to lobby after a multiplayer game ends
+// Now uses playAgain message for fresh room assignment
 function returnToMultiplayerLobby() {
-    DebugLog.log('Returning to multiplayer lobby', 'game');
+    DebugLog.log('Requesting to rejoin lobby via playAgain', 'game');
 
     // Clear zombies and pickups
     zombies.forEach((z, id) => {
@@ -5900,27 +5937,21 @@ function returnToMultiplayerLobby() {
         mesh.visible = true;
     });
 
-    // Hide game UI, show lobby
+    // Hide game over screen (lobby will show when server responds with init)
     setElementDisplay('game-over-screen', 'none');
     setElementDisplay('hud', 'none');
     setElementDisplay('crosshair', 'none');
     setElementDisplay('multiplayer-panel', 'none');
-    setElementDisplay('lobby-screen', 'flex');
 
     // Exit pointer lock
     document.exitPointerLock();
 
-    // Update ready button to show not ready
-    const readyBtn = document.getElementById('ready-button');
-    if (readyBtn) {
-        readyBtn.textContent = 'READY';
-        readyBtn.classList.remove('ready');
-    }
+    // Send playAgain to server - server will respond with init message
+    // which will trigger handleInit() to show lobby with new room assignment
+    sendToServer({ type: 'playAgain' });
 
-    // Send ready state to server (not ready)
-    sendToServer({ type: 'ready', isReady: false });
-
-    updatePlayerList();
+    // Note: Don't show lobby screen yet - wait for init response
+    // handleInit() will show the lobby when server confirms room assignment
 }
 
 // Throttle sync processing to avoid freezing

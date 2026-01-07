@@ -1768,8 +1768,15 @@ NavGrid.init();
 NavGrid.buildFromObstacles(MAP_OBSTACLES.dining_hall);
 
 // ==================== MULTI-LOBBY SYSTEM ====================
+const ROOM_STATE = {
+    QUEUING: 'queuing',
+    PLAYING: 'playing',
+    GAME_OVER: 'game_over'
+};
+
 const gameRooms = new Map(); // roomId -> GameRoom
 const playerRooms = new Map(); // playerId -> roomId
+const roomlessPlayers = new Map(); // playerId -> { ws, name, cosmetic } - Players between games
 
 // Map configuration - which map for which waves
 const WAVE_MAP_CONFIG = [
@@ -1800,8 +1807,9 @@ function createGameRoom() {
         wave: 1,
         zombiesRemaining: 0,
         zombiesSpawned: 0,
-        isRunning: false,
-        isInLobby: true,
+        state: ROOM_STATE.QUEUING,    // New: unified state field
+        isRunning: false,             // Deprecated: kept for backward compatibility
+        isInLobby: true,              // Deprecated: kept for backward compatibility
         isPaused: false,
         lastZombieId: 0,
         lastPickupId: 0,
@@ -1823,14 +1831,15 @@ function createGameRoom() {
 }
 
 function findOrCreateLobby() {
-    // Find an existing lobby that's not running
+    // Find THE queuing room (enforce single queue rule)
+    // Only one room should be in QUEUING state at a time (except overflow)
     for (const [roomId, room] of gameRooms) {
-        if (room.isInLobby && !room.isRunning && room.players.size < 8) {
+        if (room.state === ROOM_STATE.QUEUING && room.players.size < 8) {
             log(`Found existing lobby with ${room.players.size} players`, 'LOBBY', roomId);
             return room;
         }
     }
-    // No available lobby, create new one
+    // No available queuing room, create new one
     return createGameRoom();
 }
 
@@ -1851,6 +1860,34 @@ function cleanupEmptyRooms() {
             log(`Removed empty room: ${roomId}`, 'INFO');
         }
     }
+}
+
+// Remove player from room without closing WebSocket (for game over flow)
+// Player becomes "roomless" and can rejoin via playAgain
+function removePlayerFromRoom(playerId, room) {
+    if (!room) return null;
+
+    const player = room.players.get(playerId);
+    if (!player) return null;
+
+    // Store player info for rejoining (preserve name and cosmetic)
+    const playerInfo = {
+        ws: player.ws,
+        name: player.name,
+        cosmetic: player.cosmetic,
+        color: player.color
+    };
+
+    // Remove from room but keep WebSocket open
+    room.players.delete(playerId);
+    playerRooms.delete(playerId);
+
+    // Track as roomless player
+    roomlessPlayers.set(playerId, playerInfo);
+
+    log(`Player "${player.name}" removed from room (now roomless)`, 'PLAYER', room.id);
+
+    return playerInfo;
 }
 
 // Legacy compatibility - points to first room (does NOT auto-create to prevent memory leaks)
@@ -3144,7 +3181,7 @@ function closeShopInRoom(room) {
     const roomId = room.id;
     setTimeout(() => {
         const currentRoom = gameRooms.get(roomId);
-        if (currentRoom && currentRoom.isRunning) {
+        if (currentRoom && currentRoom.state === ROOM_STATE.PLAYING) {
             startWaveInRoom(currentRoom);
         }
     }, 1000);
@@ -3152,11 +3189,13 @@ function closeShopInRoom(room) {
 
 // ==================== ROOM-SPECIFIC GAME CONTROL ====================
 function startGameInRoom(room) {
-    if (!room || room.isRunning) return;
+    if (!room || room.state === ROOM_STATE.PLAYING) return;
 
     log('Starting game...', 'GAME', room.id);
 
-    room.isRunning = true;
+    // Set state to PLAYING
+    room.state = ROOM_STATE.PLAYING;
+    room.isRunning = true;  // Keep deprecated fields in sync
     room.isInLobby = false;
     room.isPaused = false;
     room.wave = 1;
@@ -3195,6 +3234,10 @@ function resetGameInRoom(room) {
     if (!room) return;
 
     stopGameInRoom(room);
+
+    // Set state back to QUEUING (for legacy reset feature)
+    room.state = ROOM_STATE.QUEUING;
+    room.isInLobby = true;  // Keep deprecated fields in sync
 
     // Reset player states
     room.players.forEach(player => {
@@ -3293,8 +3336,12 @@ function gameOverInRoom(room) {
     if (!room) return;
     log(`GAME OVER! Wave ${room.wave}, Score: ${room.totalScore}, Kills: ${room.totalKills}`, 'GAME', room.id);
 
-    stopGameInRoom(room);
+    // Set state to GAME_OVER before broadcasting
+    room.state = ROOM_STATE.GAME_OVER;
+    room.isRunning = false;  // Keep deprecated fields in sync
+    room.isInLobby = false;
 
+    // Broadcast game over to all players BEFORE removing them
     broadcastToRoom(room, {
         type: 'gameOver',
         wave: room.wave,
@@ -3302,6 +3349,20 @@ function gameOverInRoom(room) {
         totalScore: room.totalScore,
         players: getPlayersDataFromRoom(room)
     });
+
+    // Get player IDs before removing (to avoid iterator issues)
+    const playerIds = Array.from(room.players.keys());
+
+    // Remove all players from room (they stay connected but roomless)
+    for (const playerId of playerIds) {
+        removePlayerFromRoom(playerId, room);
+    }
+
+    // Stop game timers and cleanup
+    stopGameInRoom(room);
+
+    // Room will be cleaned up since it's now empty
+    cleanupEmptyRooms();
 }
 
 function resetGame() {
@@ -3471,8 +3532,10 @@ function checkAllReadyInRoom(room) {
 function stopGameInRoom(room) {
     if (!room) return;
 
+    // Note: Don't set state here - caller (gameOverInRoom) already sets to GAME_OVER
+    // Keep deprecated fields in sync
     room.isRunning = false;
-    room.isInLobby = true;
+    room.isInLobby = false;  // Not in lobby - room is about to be deleted
 
     // Clear all timers and intervals to prevent memory leaks
     if (room.spawnInterval) {
@@ -3543,7 +3606,7 @@ function startLobbyCountdownInRoom(room) {
             clearInterval(room.countdownTimer);
             room.countdownTimer = null;
 
-            if (checkAllReadyInRoom(room) && room.isInLobby) {
+            if (checkAllReadyInRoom(room) && room.state === ROOM_STATE.QUEUING) {
                 startMultiplayerGameInRoom(room);
             }
         }
@@ -3562,7 +3625,9 @@ function cancelLobbyCountdownInRoom(room) {
 function startMultiplayerGameInRoom(room) {
     if (!room) return;
 
-    room.isInLobby = false;
+    // Set state to PLAYING
+    room.state = ROOM_STATE.PLAYING;
+    room.isInLobby = false;  // Keep deprecated fields in sync
     room.isRunning = true;
     room.isPaused = false;
     room.wave = 1;
@@ -3899,17 +3964,23 @@ function sanitizeString(str, maxLength = 50) {
 }
 
 function handleMessage(playerId, message) {
+    // Validate message structure first
+    if (!message || typeof message.type !== 'string') {
+        log(`Invalid message from ${playerId}: missing type`, 'WARN');
+        return;
+    }
+
+    // Handle playAgain from roomless players (after game over)
+    if (message.type === 'playAgain') {
+        handlePlayAgainRequest(playerId);
+        return;
+    }
+
     const room = getPlayerRoom(playerId);
     if (!room) return;
 
     const player = room.players.get(playerId);
     if (!player) return;
-
-    // Validate message structure
-    if (!message || typeof message.type !== 'string') {
-        log(`Invalid message from ${playerId}: missing type`, 'WARN');
-        return;
-    }
 
     switch (message.type) {
         case 'ready':
@@ -4108,6 +4179,105 @@ function handleMessage(playerId, message) {
             // Silently ignore unknown message types to prevent log spam
             break;
     }
+}
+
+// ==================== PLAY AGAIN HANDLER ====================
+// Handles rejoining after game over (player is roomless)
+function handlePlayAgainRequest(playerId) {
+    const roomlessInfo = roomlessPlayers.get(playerId);
+    if (!roomlessInfo || !roomlessInfo.ws || roomlessInfo.ws.readyState !== WebSocket.OPEN) {
+        log(`Play again request from invalid player: ${playerId}`, 'WARN');
+        return;
+    }
+
+    // Find or create a queuing room
+    const room = findOrCreateLobby();
+
+    // Get colors for the new player
+    const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff, 0xff8844, 0x88ff44];
+    const playerNum = room.players.size;
+
+    // Create new player object, preserving name and cosmetic
+    const player = {
+        id: playerId,
+        name: roomlessInfo.name || `Player ${playerNum + 1}`,
+        ws: roomlessInfo.ws,
+        roomId: room.id,
+        position: { x: (Math.random() - 0.5) * 10, y: 1.8, z: 10 + Math.random() * 5 },
+        rotation: { x: 0, y: 0 },
+        health: 100,
+        isAlive: true,
+        isReady: false,
+        color: colors[playerNum % colors.length],
+        cosmetic: roomlessInfo.cosmetic || 'default',
+        currentWeapon: 'pistol',
+        lastUpdate: Date.now(),
+        kills: 0,
+        score: 0
+    };
+
+    // Add player to room
+    room.players.set(playerId, player);
+    playerRooms.set(playerId, room.id);
+
+    // Remove from roomless tracking
+    roomlessPlayers.delete(playerId);
+
+    log(`Player "${player.name}" rejoined via playAgain (${room.players.size} players)`, 'PLAYER', room.id);
+
+    // Send init message (same format as fresh connection)
+    const initMessage = {
+        type: 'init',
+        playerId: playerId,
+        roomId: room.id,
+        player: {
+            id: player.id,
+            name: player.name,
+            position: player.position,
+            rotation: player.rotation,
+            health: player.health,
+            isAlive: player.isAlive,
+            isReady: player.isReady,
+            color: player.color,
+            cosmetic: player.cosmetic
+        },
+        gameState: {
+            isRunning: room.state === ROOM_STATE.PLAYING,
+            isInLobby: room.state === ROOM_STATE.QUEUING,
+            wave: room.wave,
+            zombiesRemaining: room.zombiesRemaining,
+            totalKills: room.totalKills,
+            totalScore: room.totalScore
+        },
+        players: getPlayersDataFromRoom(room).filter(p => p.id !== playerId),
+        zombies: getZombiesDataFromRoom(room),
+        pickups: getPickupsDataFromRoom(room)
+    };
+
+    try {
+        roomlessInfo.ws.send(JSON.stringify(initMessage));
+    } catch (e) {
+        log(`Error sending init to ${playerId}: ${e.message}`, 'ERROR');
+    }
+
+    // Notify other players in room
+    broadcastLobbyUpdateToRoom(room);
+
+    // Also send playerJoined for game compatibility
+    broadcastToRoom(room, {
+        type: 'playerJoined',
+        player: {
+            id: player.id,
+            name: player.name,
+            position: player.position,
+            rotation: player.rotation,
+            health: player.health,
+            isAlive: player.isAlive,
+            isReady: player.isReady,
+            color: player.color,
+            cosmetic: player.cosmetic
+        }
+    }, playerId);
 }
 
 // ==================== BINARY PROTOCOL ====================

@@ -941,6 +941,17 @@
         }
 
         /* Lobby styles */
+        .lobby-id {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #888;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 5px 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
         #lobby-players {
             background: rgba(0, 0, 0, 0.6);
             border: 2px solid #8b0000;
@@ -3221,6 +3232,7 @@
     <div id="lobby-screen" style="display: none;" role="region" aria-labelledby="lobby-title">
         <h2 class="menu-title" id="lobby-title">MULTIPLAYER LOBBY</h2>
         <div class="menu-subtitle">Waiting for players...</div>
+        <div id="lobby-id" class="lobby-id">Lobby: ------</div>
         <div id="lobby-players" role="list" aria-label="Players in lobby">
             <div class="lobby-header">PLAYERS</div>
             <div id="lobby-player-list"></div>
@@ -3925,6 +3937,12 @@
             #lobby-screen .menu-subtitle {
                 font-size: 12px !important;
                 margin-bottom: 5px !important;
+            }
+
+            .lobby-id {
+                font-size: 11px;
+                padding: 3px 10px;
+                margin-bottom: 5px;
             }
 
             .lobby-header {
