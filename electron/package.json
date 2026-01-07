@@ -76,6 +76,11 @@
         "filter": ["**/*"]
       },
       {
+        "from": "../sounds",
+        "to": "app/sounds",
+        "filter": ["**/*"]
+      },
+      {
         "from": "../privacy.html",
         "to": "app/privacy.html"
       },
