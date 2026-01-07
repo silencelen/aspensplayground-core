@@ -2109,6 +2109,23 @@ const weapon = {
 // Weapon list for cycling
 const weaponList = ['pistol', 'smg', 'shotgun', 'rocketLauncher', 'laserGun'];
 
+// Reset weapons to default starting state
+function resetWeaponsToDefaults() {
+    weapon.current = 'pistol';
+    weapon.ammo = WEAPONS.pistol.magSize;
+    weapon.reserveAmmo = WEAPONS.pistol.reserveMax;
+    weapon.isReloading = false;
+    weapon.grenades = 3;
+    weapon.inventory = {
+        pistol: { ammo: WEAPONS.pistol.magSize, reserve: WEAPONS.pistol.reserveMax },
+        smg: { ammo: WEAPONS.smg.magSize, reserve: WEAPONS.smg.reserveMax },
+        shotgun: { ammo: WEAPONS.shotgun.magSize, reserve: WEAPONS.shotgun.reserveMax },
+        rocketLauncher: { ammo: WEAPONS.rocketLauncher.magSize, reserve: WEAPONS.rocketLauncher.reserveMax },
+        laserGun: { ammo: WEAPONS.laserGun.magSize, reserve: WEAPONS.laserGun.reserveMax }
+    };
+    updateWeaponModel();
+}
+
 // Active projectiles (rockets, grenades)
 const projectiles = [];
 
