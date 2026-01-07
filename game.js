@@ -9467,6 +9467,9 @@ function initControls() {
     document.addEventListener('pointerlockchange', onPointerLockChange);
     document.addEventListener('wheel', onWheel, { passive: false });
 
+    // Prevent right-click context menu during gameplay
+    document.addEventListener('contextmenu', onContextMenu);
+
     // Initialize mobile controls if on mobile device
     if (isMobile) {
         initMobileControls();
@@ -9484,6 +9487,7 @@ function cleanupControls() {
     document.removeEventListener('mouseup', onMouseUp);
     document.removeEventListener('pointerlockchange', onPointerLockChange);
     document.removeEventListener('wheel', onWheel);
+    document.removeEventListener('contextmenu', onContextMenu);
 
     // Clean up mobile controls
     if (mobileAbortController) {
@@ -9992,11 +9996,17 @@ function onMouseMove(event) {
 
 function onMouseDown(event) {
     if (event.button === 0) {
+        // Left click - shoot
         if (!pointerLocked && GameState.isRunning && !GameState.isPaused) {
             safeRequestPointerLock();
         } else if (GameState.isRunning && !GameState.isPaused) {
             weapon.isFiring = true;
             shoot();
+        }
+    } else if (event.button === 2) {
+        // Right click - cancel reload if in progress
+        if (GameState.isRunning && !GameState.isPaused && weapon.isReloading) {
+            cancelReload();
         }
     }
 }
@@ -10004,6 +10014,13 @@ function onMouseDown(event) {
 function onMouseUp(event) {
     if (event.button === 0) {
         weapon.isFiring = false;
+    }
+}
+
+function onContextMenu(event) {
+    // Prevent right-click context menu during gameplay
+    if (GameState.isRunning && !GameState.isPaused) {
+        event.preventDefault();
     }
 }
 
@@ -10351,6 +10368,45 @@ function reload() {
     }
 
     reloadAnimationId = requestAnimationFrame(animateReload);
+}
+
+// Cancel reload in progress (e.g., on right-click)
+function cancelReload() {
+    if (!weapon.isReloading) return;
+
+    DebugLog.log('Reload cancelled', 'game');
+
+    // Cancel animation frame
+    if (reloadAnimationId) {
+        cancelAnimationFrame(reloadAnimationId);
+        reloadAnimationId = null;
+    }
+
+    // Reset weapon model to original position
+    if (weapon.model && weapon.modelOriginalRot) {
+        weapon.model.rotation.x = weapon.modelOriginalRot.x;
+        weapon.model.rotation.z = weapon.modelOriginalRot.z;
+        weapon.model.position.copy(weapon.modelOriginalPos);
+    }
+
+    // Reset magazine position
+    if (weapon.magazine && weapon.magazineOriginalPos) {
+        weapon.magazine.position.copy(weapon.magazineOriginalPos);
+        weapon.magazine.rotation.x = 0;
+        weapon.magazine.visible = true;
+    }
+
+    // Hide reload progress indicator
+    const reloadProgress = document.getElementById('reload-progress');
+    if (reloadProgress) {
+        reloadProgress.style.display = 'none';
+        reloadProgress.classList.remove('complete');
+        const reloadFill = reloadProgress.querySelector('.reload-fill');
+        if (reloadFill) reloadFill.style.strokeDashoffset = 163.36;
+    }
+
+    weapon.isReloading = false;
+    // Note: ammo is NOT added since reload was cancelled
 }
 
 // ==================== SPECIAL WEAPONS ====================
