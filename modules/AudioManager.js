@@ -62,7 +62,7 @@ const AudioManager = {
             fallback: 'procedural'
         },
         weaponSwitch: {
-            src: 'sounds/weapons/switch.mp3',
+            src: null // procedural only,
             volume: 0.5,
             variations: 1,
             fallback: 'procedural'
@@ -77,7 +77,7 @@ const AudioManager = {
 
         // === COMBAT ===
         hit: {
-            src: 'sounds/combat/hit.mp3',
+            src: null // procedural only,
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
@@ -95,25 +95,25 @@ const AudioManager = {
             fallback: 'procedural'
         },
         zombieAttack: {
-            src: 'sounds/combat/zombie_attack.mp3',
+            src: null // procedural only,
             volume: 0.7,
             variations: 3,
             fallback: 'procedural'
         },
         zombieDeath: {
-            src: 'sounds/combat/zombie_death.mp3',
+            src: null // procedural only,
             volume: 0.75,
             variations: 3,
             fallback: 'procedural'
         },
         zombieGrowl: {
-            src: 'sounds/combat/zombie_growl.mp3',
+            src: null // procedural only,
             volume: 0.5,
             variations: 3,
             fallback: 'procedural'
         },
         glass: {
-            src: 'sounds/combat/glass.mp3',
+            src: null // procedural only,
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
@@ -121,37 +121,37 @@ const AudioManager = {
 
         // === FEEDBACK/UI ===
         pickup: {
-            src: 'sounds/ui/pickup.mp3',
+            src: null // procedural only,
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
         },
         killStreak: {
-            src: 'sounds/ui/killstreak.mp3',
+            src: null // procedural only,
             volume: 0.6,
             variations: 1,
             fallback: 'procedural'
         },
         lowHealth: {
-            src: 'sounds/ui/low_health.mp3',
+            src: null // procedural only,
             volume: 0.5,
             variations: 1,
             fallback: 'procedural'
         },
         waveComplete: {
-            src: 'sounds/ui/wave_complete.mp3',
+            src: null // procedural only,
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
         },
         gameOver: {
-            src: 'sounds/ui/game_over.mp3',
+            src: null // procedural only,
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
         },
         menuClick: {
-            src: 'sounds/ui/menu_click.mp3',
+            src: null // procedural only,
             volume: 0.5,
             variations: 1,
             fallback: 'procedural'
@@ -159,13 +159,13 @@ const AudioManager = {
 
         // === FOOTSTEPS ===
         footstep: {
-            src: 'sounds/footsteps/footstep.mp3',
+            src: null // procedural only,
             volume: 0.4,
             variations: 4,
             fallback: 'procedural'
         },
         footstepRun: {
-            src: 'sounds/footsteps/footstep_run.mp3',
+            src: null // procedural only,
             volume: 0.5,
             variations: 4,
             fallback: 'procedural'
@@ -173,43 +173,43 @@ const AudioManager = {
 
         // === AMBIENT ===
         ambientDrone: {
-            src: 'sounds/ambient/drone.mp3',
+            src: null // procedural only,
             volume: 0.3,
             loop: true,
             fallback: 'procedural'
         },
         ambientWind: {
-            src: 'sounds/ambient/wind.mp3',
+            src: null // procedural only,
             volume: 0.2,
             loop: true,
             fallback: 'procedural'
         },
         whisper: {
-            src: 'sounds/ambient/whisper.mp3',
+            src: null // procedural only,
             volume: 0.4,
             variations: 3,
             fallback: 'procedural'
         },
         distantScream: {
-            src: 'sounds/ambient/scream.mp3',
+            src: null // procedural only,
             volume: 0.5,
             variations: 2,
             fallback: 'procedural'
         },
         creak: {
-            src: 'sounds/ambient/creak.mp3',
+            src: null // procedural only,
             volume: 0.4,
             variations: 2,
             fallback: 'procedural'
         },
         metalScrape: {
-            src: 'sounds/ambient/metal_scrape.mp3',
+            src: null // procedural only,
             volume: 0.4,
             variations: 1,
             fallback: 'procedural'
         },
         heartbeat: {
-            src: 'sounds/ambient/heartbeat.mp3',
+            src: null // procedural only,
             volume: 0.6,
             loop: true,
             fallback: 'procedural'
@@ -285,14 +285,14 @@ const AudioManager = {
         if (this.isLoading) return;
         this.isLoading = true;
 
-        const soundKeys = Object.keys(this.sounds);
-        this.totalCount = soundKeys.length;
+        // Only load sounds that have a file path (src is not null)
+        const soundsWithFiles = Object.entries(this.sounds).filter(([_, sound]) => sound.src !== null);
+        this.totalCount = soundsWithFiles.length;
         this.loadedCount = 0;
 
-        console.log(`[AudioManager] Preloading ${this.totalCount} sounds...`);
+        console.log(`[AudioManager] Preloading ${this.totalCount} sound files...`);
 
-        const loadPromises = soundKeys.map(async (key) => {
-            const sound = this.sounds[key];
+        const loadPromises = soundsWithFiles.map(async ([key, sound]) => {
             try {
                 // Load main sound
                 await this.loadSound(key, sound.src);
@@ -300,7 +300,7 @@ const AudioManager = {
                 // Load variations if any
                 if (sound.variations > 1) {
                     for (let i = 2; i <= sound.variations; i++) {
-                        const varSrc = sound.src.replace('.mp3', `_${i}.mp3`);
+                        const varSrc = sound.src.replace(/\.(mp3|ogg|wav)$/, `_${i}.$1`);
                         await this.loadSound(`${key}_${i}`, varSrc);
                     }
                 }
@@ -308,7 +308,6 @@ const AudioManager = {
                 this.loadedCount++;
             } catch (e) {
                 // Sound file not found - will use procedural fallback
-                console.log(`[AudioManager] Using procedural fallback for: ${key}`);
                 this.loadedCount++;
             }
         });
