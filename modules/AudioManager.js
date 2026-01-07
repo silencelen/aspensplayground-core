@@ -26,7 +26,7 @@ const AudioManager = {
     sounds: {
         // === WEAPONS ===
         pistol: {
-            src: 'sounds/weapons/pistol.mp3',
+            src: 'sounds/weapons/pistol.wav',
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
@@ -38,7 +38,7 @@ const AudioManager = {
             fallback: 'procedural'
         },
         shotgun: {
-            src: 'sounds/weapons/shotgun.mp3',
+            src: 'sounds/weapons/shotgun.wav',
             volume: 0.9,
             variations: 1,
             fallback: 'procedural'
@@ -69,7 +69,7 @@ const AudioManager = {
         },
         // Generic shoot sound (used when weapon type is unknown)
         shoot: {
-            src: 'sounds/weapons/pistol.mp3',
+            src: 'sounds/weapons/pistol.wav',
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
