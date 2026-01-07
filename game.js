@@ -6104,6 +6104,13 @@ function updatePlayerNametag(playerId, healthPercent) {
 }
 
 function createRemotePlayerMesh(playerData) {
+    // Remove any existing mesh for this player to prevent duplicates
+    const existingMesh = remotePlayerMeshes.get(playerData.id);
+    if (existingMesh) {
+        scene.remove(existingMesh);
+        remotePlayerMeshes.delete(playerData.id);
+    }
+
     const group = new THREE.Group();
 
     // Get cosmetic data - use cosmetic colors if available, otherwise fallback to player color
@@ -15190,6 +15197,13 @@ function leaveLobby() {
     reconnectAttempts = 0; // Reset for future connections
 
     LobbyState.players.clear();
+
+    // Clean up remote player data and meshes to prevent ghost players on rejoin
+    remotePlayers.clear();
+    remotePlayerMeshes.forEach((mesh) => {
+        if (mesh) scene.remove(mesh);
+    });
+    remotePlayerMeshes.clear();
 
     setElementDisplay('lobby-screen', 'none');
     setElementDisplay('start-screen', 'flex');
