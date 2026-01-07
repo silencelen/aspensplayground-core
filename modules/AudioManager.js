@@ -62,7 +62,7 @@ const AudioManager = {
             fallback: 'procedural'
         },
         weaponSwitch: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.5,
             variations: 1,
             fallback: 'procedural'
@@ -77,7 +77,7 @@ const AudioManager = {
 
         // === COMBAT ===
         hit: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
@@ -95,25 +95,25 @@ const AudioManager = {
             fallback: 'procedural'
         },
         zombieAttack: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.7,
             variations: 3,
             fallback: 'procedural'
         },
         zombieDeath: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.75,
             variations: 3,
             fallback: 'procedural'
         },
         zombieGrowl: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.5,
             variations: 3,
             fallback: 'procedural'
         },
         glass: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
@@ -121,37 +121,37 @@ const AudioManager = {
 
         // === FEEDBACK/UI ===
         pickup: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
         },
         killStreak: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.6,
             variations: 1,
             fallback: 'procedural'
         },
         lowHealth: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.5,
             variations: 1,
             fallback: 'procedural'
         },
         waveComplete: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.7,
             variations: 1,
             fallback: 'procedural'
         },
         gameOver: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.8,
             variations: 1,
             fallback: 'procedural'
         },
         menuClick: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.5,
             variations: 1,
             fallback: 'procedural'
@@ -159,13 +159,13 @@ const AudioManager = {
 
         // === FOOTSTEPS ===
         footstep: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.4,
             variations: 4,
             fallback: 'procedural'
         },
         footstepRun: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.5,
             variations: 4,
             fallback: 'procedural'
@@ -173,43 +173,43 @@ const AudioManager = {
 
         // === AMBIENT ===
         ambientDrone: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.3,
             loop: true,
             fallback: 'procedural'
         },
         ambientWind: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.2,
             loop: true,
             fallback: 'procedural'
         },
         whisper: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.4,
             variations: 3,
             fallback: 'procedural'
         },
         distantScream: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.5,
             variations: 2,
             fallback: 'procedural'
         },
         creak: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.4,
             variations: 2,
             fallback: 'procedural'
         },
         metalScrape: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.4,
             variations: 1,
             fallback: 'procedural'
         },
         heartbeat: {
-            src: null // procedural only,
+            src: null, // procedural only
             volume: 0.6,
             loop: true,
             fallback: 'procedural'
