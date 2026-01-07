@@ -1202,7 +1202,6 @@
         #gameover-leaderboard {
             padding: 10px 15px;
             margin: 0;
-            min-width: auto;
             height: 100%;
             max-height: none;
             box-sizing: border-box;
@@ -3285,7 +3284,6 @@
             <div class="gameover-leaderboard-column">
                 <div id="rank-result" class="your-rank"></div>
                 <div id="gameover-leaderboard" class="leaderboard-container">
-                    <div class="leaderboard-title">TOP 10</div>
                     <div id="gameover-leaderboard-content"></div>
                 </div>
             </div>
@@ -4341,7 +4339,7 @@
             }
 
             #rank-result {
-                font-size: 11px;
+                font-size: 15px;
                 padding: 4px 10px;
                 margin: 3px 0;
             }
@@ -4514,7 +4512,7 @@
             }
 
             .stat-value {
-                font-size: 11px !important;
+                font-size: 17px !important;
             }
 
             .stat-label {
@@ -4589,7 +4587,7 @@
             }
 
             #gameover-leaderboard {
-                max-height: 150px;
+                max-height: calc(100% - 40px);
                 padding: 6px 10px;
             }
 
