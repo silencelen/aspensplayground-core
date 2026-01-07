@@ -1201,25 +1201,51 @@ function rotateLogIfNeeded(logFile) {
     }
 }
 
-function log(message, type = 'INFO') {
+// Enhanced logging with categories and room support
+// Usage: log(message, type) or log(message, type, roomId)
+function log(message, type = 'INFO', roomId = null) {
     const timestamp = new Date().toISOString();
+    const timeOnly = timestamp.split('T')[1].split('.')[0]; // HH:MM:SS
+
+    // Color codes for different log types
     const colors = {
-        'INFO': '\x1b[36m',
-        'WARN': '\x1b[33m',
-        'ERROR': '\x1b[31m',
-        'SUCCESS': '\x1b[32m',
-        'GAME': '\x1b[35m',
-        'PLAYER': '\x1b[34m',
-        'DEBUG': '\x1b[90m',
-        'FATAL': '\x1b[41m\x1b[37m'
+        // General
+        'INFO':     '\x1b[36m',      // Cyan
+        'WARN':     '\x1b[33m',      // Yellow
+        'ERROR':    '\x1b[31m',      // Red
+        'SUCCESS':  '\x1b[32m',      // Green
+        'DEBUG':    '\x1b[90m',      // Gray
+        'FATAL':    '\x1b[41m\x1b[37m', // Red bg, white text
+
+        // Game-specific
+        'LOBBY':    '\x1b[38;5;214m', // Orange - lobby events
+        'WAVE':     '\x1b[38;5;201m', // Pink - wave/spawn events
+        'COMBAT':   '\x1b[38;5;196m', // Bright red - damage/kills
+        'PICKUP':   '\x1b[38;5;226m', // Bright yellow - pickups
+        'PLAYER':   '\x1b[34m',       // Blue - player join/leave
+        'SYNC':     '\x1b[38;5;51m',  // Bright cyan - sync/broadcast
+        'NETWORK':  '\x1b[38;5;245m', // Gray - network events
+        'GAME':     '\x1b[35m',       // Magenta - general game events
+        'SHOP':     '\x1b[38;5;118m', // Bright green - shop events
+        'BOSS':     '\x1b[38;5;129m', // Purple - boss events
     };
+
     const reset = '\x1b[0m';
+    const dim = '\x1b[2m';
+    const bold = '\x1b[1m';
+
+    // Format room tag if provided
+    const roomTag = roomId ? `${dim}[${roomId.substring(0, 6)}]${reset} ` : '';
+
+    // Pad type to fixed width for alignment
+    const paddedType = type.padEnd(7);
 
     // Console output with colors
-    console.log(`${colors[type] || ''}[${timestamp}] [${type}] ${message}${reset}`);
+    console.log(`${dim}[${timeOnly}]${reset} ${colors[type] || ''}${bold}${paddedType}${reset} ${roomTag}${message}`);
 
-    // File output (plain text)
-    const logLine = `[${timestamp}] [${type}] ${message}\n`;
+    // File output (plain text with full timestamp)
+    const roomPart = roomId ? `[${roomId.substring(0, 6)}] ` : '';
+    const logLine = `[${timestamp}] [${type}] ${roomPart}${message}\n`;
     try {
         rotateLogIfNeeded(LOG_FILE);
         fs.appendFileSync(LOG_FILE, logLine);
@@ -1800,7 +1826,7 @@ function findOrCreateLobby() {
     // Find an existing lobby that's not running
     for (const [roomId, room] of gameRooms) {
         if (room.isInLobby && !room.isRunning && room.players.size < 8) {
-            log(`Found existing lobby: ${roomId} with ${room.players.size} players`, 'INFO');
+            log(`Found existing lobby with ${room.players.size} players`, 'LOBBY', roomId);
             return room;
         }
     }
@@ -1923,7 +1949,7 @@ function createPlayer(ws, id) {
 
     room.players.set(id, player);
     playerRooms.set(id, room.id);
-    log(`Player ${player.name} (${id}) joined room ${room.id}. Room players: ${room.players.size}`, 'PLAYER');
+    log(`Player "${player.name}" joined (${room.players.size} players)`, 'PLAYER', room.id);
 
     return player;
 }
@@ -1934,7 +1960,7 @@ function removePlayer(id) {
 
     const player = room.players.get(id);
     if (player) {
-        log(`Player ${player.name} (${id}) left room ${room.id}. Room players: ${room.players.size - 1}`, 'PLAYER');
+        log(`Player "${player.name}" left (${room.players.size - 1} remaining)`, 'PLAYER', room.id);
 
         // Clean up game session to prevent memory leak
         const sessionToken = playerIdToToken.get(id);
@@ -1962,7 +1988,7 @@ function removePlayer(id) {
             try {
                 stopGameInRoom(room);
             } catch (e) {
-                log(`Error stopping game in room ${room.id}: ${e.message}`, 'ERROR');
+                log(`Error stopping game: ${e.message}`, 'ERROR', room.id);
             } finally {
                 cleanupEmptyRooms();
             }
@@ -2055,7 +2081,7 @@ function spawnZombie() {
     GameState.zombies.set(id, zombie);
     GameState.zombiesSpawned++;
 
-    log(`Spawned ${zombieType} zombie ${id} at (${position.x.toFixed(1)}, ${position.z.toFixed(1)})`, 'GAME');
+    log(`Spawned ${zombieType} zombie at (${position.x.toFixed(1)}, ${position.z.toFixed(1)})`, 'WAVE');
 
     broadcast({
         type: 'zombieSpawned',
@@ -2071,7 +2097,7 @@ function spawnZombieInRoom(room) {
     const maxZombies = getMaxZombiesForWave(currentWave);
     const aliveZombies = Array.from(room.zombies.values()).filter(z => z.isAlive);
     if (aliveZombies.length >= maxZombies) {
-        log(`Max zombies alive (${maxZombies} for wave ${currentWave}) in room ${room.id}, waiting...`, 'WARN');
+        log(`Max zombies alive (${maxZombies}), waiting...`, 'WAVE', room.id);
         return;
     }
 
@@ -2122,7 +2148,7 @@ function spawnZombieInRoom(room) {
     room.zombies.set(id, zombie);
     room.zombiesSpawned++;
 
-    log(`Spawned ${zombieType} zombie ${id} in room ${room.id}`, 'GAME');
+    log(`Spawned ${zombieType} zombie at (${position.x.toFixed(1)}, ${position.z.toFixed(1)})`, 'WAVE', room.id);
 
     broadcastToRoom(room, {
         type: 'zombieSpawned',
@@ -2157,7 +2183,7 @@ function spawnMinion(room, bossPosition) {
     room.zombies.set(id, zombie);
     // Minions don't count toward zombiesSpawned/remaining
 
-    log(`Boss summoned minion ${id} in room ${room.id}`, 'GAME');
+    log(`Boss summoned minion`, 'BOSS', room.id);
 
     broadcastToRoom(room, {
         type: 'zombieSpawned',
@@ -2291,33 +2317,42 @@ function updateZombies(room = null) {
             // Ground Slam - when close to player
             if (distance < 8 && now - bossState.lastGroundSlam > bossState.attacks.groundSlam.cooldown * cooldownMult) {
                 bossState.lastGroundSlam = now;
-                // Damage all nearby players
-                GameState.players.forEach((p, pid) => {
+                // Damage all nearby players in this room only
+                const playersToCheck = room ? room.players : state.players;
+                playersToCheck.forEach((p, pid) => {
                     if (!p.isAlive) return;
                     const pdx = p.position.x - zombie.position.x;
                     const pdz = p.position.z - zombie.position.z;
                     const pDist = Math.sqrt(pdx * pdx + pdz * pdz);
                     if (pDist < bossState.attacks.groundSlam.radius) {
-                        damagePlayer(pid, bossState.attacks.groundSlam.damage);
+                        damagePlayer(pid, bossState.attacks.groundSlam.damage, room);
                     }
                 });
-                broadcast({ type: 'bossGroundSlam', zombieId: zombie.id, position: zombie.position });
+                if (room) {
+                    broadcastToRoom(room, { type: 'bossGroundSlam', zombieId: zombie.id, position: zombie.position });
+                } else {
+                    broadcast({ type: 'bossGroundSlam', zombieId: zombie.id, position: zombie.position });
+                }
             }
-            
+
             // Charge - when far from player
             if (distance > 10 && distance < 25 && now - bossState.lastCharge > bossState.attacks.charge.cooldown * cooldownMult) {
                 bossState.lastCharge = now;
                 bossState.isCharging = true;
                 bossState.chargeStartTime = now;
                 bossState.chargeDirection = { x: dx / distance, z: dz / distance };
-                broadcast({ type: 'bossCharge', zombieId: zombie.id });
+                if (room) {
+                    broadcastToRoom(room, { type: 'bossCharge', zombieId: zombie.id });
+                } else {
+                    broadcast({ type: 'bossCharge', zombieId: zombie.id });
+                }
             }
-            
+
             // Summon minions - phase 2+
             if (bossState.phase >= 2 && now - bossState.lastSummon > bossState.attacks.summon.cooldown * cooldownMult) {
                 bossState.lastSummon = now;
                 const minionCount = bossState.attacks.summon.count;
-                const targetRoom = room || GameState;  // Fall back for legacy
+                const targetRoom = room || state;
                 for (let i = 0; i < minionCount; i++) {
                     spawnMinion(targetRoom, zombie.position);
                 }
@@ -2341,24 +2376,32 @@ function updateZombies(room = null) {
                     x: closestPlayer.position.x,
                     z: closestPlayer.position.z
                 };
-                broadcast({ type: 'zombieAbility', zombieId: zombie.id, ability: 'leap' });
+                if (room) {
+                    broadcastToRoom(room, { type: 'zombieAbility', zombieId: zombie.id, ability: 'leap' });
+                } else {
+                    broadcast({ type: 'zombieAbility', zombieId: zombie.id, ability: 'leap' });
+                }
                 return;
             }
-            
+
             // Tank charge - trigger at 6-12 unit range
             if (zombie.type === 'tank' && distance > 6 && distance < 12) {
                 zombie.abilityState.isCharging = true;
                 zombie.abilityState.chargeStartTime = now;
                 zombie.abilityState.lastAbilityUse = now;
                 zombie.abilityState.chargeDirection = { x: dx / distance, z: dz / distance };
-                broadcast({ type: 'zombieAbility', zombieId: zombie.id, ability: 'charge' });
+                if (room) {
+                    broadcastToRoom(room, { type: 'zombieAbility', zombieId: zombie.id, ability: 'charge' });
+                } else {
+                    broadcast({ type: 'zombieAbility', zombieId: zombie.id, ability: 'charge' });
+                }
                 return;
             }
         }
 
         // Attack range varies by zombie type - use GameCore
         const attackRange = GameCore.ZombieAI.getAttackRange(zombie.type);
-        
+
         // Attack if close enough
         if (distance <= attackRange) {
             zombie.isAttacking = true;
@@ -2369,25 +2412,42 @@ function updateZombies(room = null) {
             const attackCooldown = GameCore.ZombieAI.getAttackCooldown(zombie.type);
             if (now - zombie.lastAttack > attackCooldown) {
                 zombie.lastAttack = now;
-                
+
                 // Spitter shoots projectile instead of direct damage
                 if (zombie.type === 'spitter') {
-                    broadcast({
-                        type: 'spitterAttack',
-                        zombieId: zombie.id,
-                        targetId: closestPlayer.id,
-                        damage: zombie.damage
-                    });
+                    if (room) {
+                        broadcastToRoom(room, {
+                            type: 'spitterAttack',
+                            zombieId: zombie.id,
+                            targetId: closestPlayer.id,
+                            damage: zombie.damage
+                        });
+                    } else {
+                        broadcast({
+                            type: 'spitterAttack',
+                            zombieId: zombie.id,
+                            targetId: closestPlayer.id,
+                            damage: zombie.damage
+                        });
+                    }
                     // Spitter damage is applied when projectile hits on client
                 } else {
-                    damagePlayer(closestPlayer.id, zombie.damage);
+                    damagePlayer(closestPlayer.id, zombie.damage, room);
                 }
 
-                broadcast({
-                    type: 'zombieAttack',
-                    zombieId: zombie.id,
-                    targetId: closestPlayer.id
-                });
+                if (room) {
+                    broadcastToRoom(room, {
+                        type: 'zombieAttack',
+                        zombieId: zombie.id,
+                        targetId: closestPlayer.id
+                    });
+                } else {
+                    broadcast({
+                        type: 'zombieAttack',
+                        zombieId: zombie.id,
+                        targetId: closestPlayer.id
+                    });
+                }
             }
             return;
         }
@@ -2531,18 +2591,27 @@ function updateZombies(room = null) {
 }
 
 function damageZombie(zombieId, damage, attackerId, isHeadshot) {
-    const zombie = GameState.zombies.get(zombieId);
+    // Get room from attacker for proper room-scoped operations
+    const room = getPlayerRoom(attackerId);
+    if (!room) {
+        log(`damageZombie: No room found for attacker ${attackerId}`, 'ERROR');
+        return false;
+    }
+
+    // Look up zombie from attacker's room, not global GameState
+    const zombie = room.zombies.get(zombieId);
     if (!zombie || !zombie.isAlive) return false;
 
     zombie.health -= damage;
-    log(`Zombie ${zombieId} took ${damage} damage (${zombie.health}/${zombie.maxHealth} HP)`, 'GAME');
+    log(`${zombie.type} zombie took ${damage} dmg (${zombie.health}/${zombie.maxHealth} HP)`, 'COMBAT', room.id);
 
     if (zombie.health <= 0) {
         killZombie(zombieId, attackerId, isHeadshot, damage);
         return true;
     }
 
-    broadcast({
+    // Broadcast to room only, not all players
+    broadcastToRoom(room, {
         type: 'zombieDamaged',
         zombieId: zombieId,
         health: zombie.health,
@@ -2586,7 +2655,8 @@ function killZombie(zombieId, killerId, isHeadshot, damage = 0) {
     // Track kill in player's authenticated session (server-side verification)
     addKillToSession(killerId, points, isHeadshot);
 
-    log(`Zombie ${zombieId} killed by ${killerId} in room ${room.id}! Remaining: ${room.zombiesRemaining}`, 'SUCCESS');
+    const killerName = killer ? killer.name : 'Unknown';
+    log(`"${killerName}" killed ${zombie.type} zombie (${room.zombiesRemaining} left)`, 'COMBAT', room.id);
 
     // Exploder zombies explode on death - use GameCore for explosion logic
     if (zombie.type === 'exploder') {
@@ -2598,7 +2668,7 @@ function killZombie(zombieId, killerId, isHeadshot, damage = 0) {
             const finalDamage = GameCore.Combat.calculateExploderDamage(distToPlayer);
             if (finalDamage > 0) {
                 damagePlayer(playerId, finalDamage, room);
-                log(`Exploder explosion damaged player ${playerId} for ${finalDamage}`, 'GAME');
+                log(`Exploder damaged "${player.name}" for ${finalDamage}`, 'COMBAT', room.id);
             }
         });
 
@@ -2634,7 +2704,7 @@ function killZombie(zombieId, killerId, isHeadshot, damage = 0) {
         const isBossWave = room.wave > 0 && room.wave % 10 === 0;
         const expectedZombies = isBossWave ? 1 : Math.floor(5 + (room.wave - 1) * 2 + Math.pow(room.wave, 1.3));
         if (room.zombiesSpawned >= expectedZombies) {
-            nextWave();
+            nextWaveInRoom(room);
         }
     }
 
@@ -2671,7 +2741,7 @@ function spawnPickup(room, position, type) {
     };
 
     room.pickups.set(id, pickup);
-    log(`Spawned ${type} pickup ${id} in room ${room.id}`, 'GAME');
+    log(`Spawned ${type} pickup`, 'PICKUP', room.id);
 
     broadcastToRoom(room, {
         type: 'pickupSpawned',
@@ -2709,7 +2779,7 @@ function collectPickup(pickupId, playerId) {
     if (pickup.type === 'health' && player.health < 100) {
         player.health = Math.min(player.health + 25, 100);
         collected = true;
-        log(`Player ${playerId} collected health pickup (+25 HP)`, 'GAME');
+        log(`"${player.name}" collected health (+25 HP)`, 'PICKUP', room.id);
     } else if (pickup.type === 'health' && player.health >= 100) {
         // Player at full health - send rejection message
         if (player.ws && player.ws.readyState === 1) {
@@ -2721,10 +2791,10 @@ function collectPickup(pickupId, playerId) {
         return;
     } else if (pickup.type === 'ammo') {
         collected = true;
-        log(`Player ${playerId} collected ammo pickup (+15 ammo)`, 'GAME');
+        log(`"${player.name}" collected ammo (+15)`, 'PICKUP', room.id);
     } else if (pickup.type === 'grenade') {
         collected = true;
-        log(`Player ${playerId} collected grenade pickup (+2 grenades)`, 'GAME');
+        log(`"${player.name}" collected grenades (+2)`, 'PICKUP', room.id);
     }
 
     if (collected) {
@@ -2753,12 +2823,12 @@ function damagePlayer(playerId, damage, room) {
     if (!player || !player.isAlive) return;
 
     player.health -= damage;
-    log(`Player ${playerId} took ${damage} damage (${player.health} HP)`, 'WARN');
+    log(`"${player.name}" took ${damage} damage (${player.health} HP)`, 'COMBAT', room.id);
 
     if (player.health <= 0) {
         player.health = 0;
         player.isAlive = false;
-        log(`Player ${playerId} died!`, 'ERROR');
+        log(`"${player.name}" died!`, 'COMBAT', room.id);
 
         broadcastToRoom(room, {
             type: 'playerDied',
@@ -2814,16 +2884,17 @@ function startWave() {
     if (mapChanged) {
         GameState.currentMapId = targetMapId;
         setServerMap(targetMapId);  // Rebuild pathfinding for new map
-        log(`Map changed to ${targetMapId} for wave ${GameState.wave}`, 'GAME');
+        log(`Map changed to ${targetMapId}`, 'WAVE');
     }
 
     // Check if this is a boss wave (every 10th wave - synced with client)
     const isBossWave = GameState.wave > 0 && GameState.wave % 10 === 0;
     if (isBossWave) {
         GameState.bossMode = true;
+        log(`BOSS WAVE ${GameState.wave} starting with ${zombieCount} zombies`, 'BOSS');
+    } else {
+        log(`Wave ${GameState.wave} starting with ${zombieCount} zombies`, 'WAVE');
     }
-
-    log(`Starting Wave ${GameState.wave} with ${zombieCount} zombies`, 'GAME');
 
     broadcast({
         type: 'waveStart',
@@ -2868,7 +2939,7 @@ function nextWave() {
     GameState.wave++;
     GameState.totalScore += waveBonus;
 
-    log(`Wave ${completedWave} complete! Bonus: ${waveBonus}. Opening upgrade shop...`, 'SUCCESS');
+    log(`Wave ${completedWave} complete! Bonus: ${waveBonus}`, 'WAVE');
 
     // Open shop for all players
     openShop(waveBonus);
@@ -2892,7 +2963,7 @@ function openShop(waveBonus = 500) {
     });
 
     const aliveCount = Array.from(GameState.players.values()).filter(p => p.isAlive).length;
-    log(`Upgrade shop opened for ${aliveCount} alive players`, 'GAME');
+    log(`Upgrade shop opened for ${aliveCount} players`, 'SHOP');
 
     // Start shop timeout (30 seconds max)
     if (GameState.shopTimeout) {
@@ -2900,7 +2971,7 @@ function openShop(waveBonus = 500) {
     }
     GameState.shopTimeout = setTimeout(() => {
         if (GameState.shopOpen) {
-            log('Shop timeout - forcing close', 'GAME');
+            log('Shop timeout - forcing close', 'SHOP');
             closeShop();
         }
     }, SHOP_MAX_TIME);
@@ -2915,7 +2986,7 @@ function handleShopReady(playerId) {
     const totalPlayers = alivePlayers.length;
     const readyCount = GameState.shopPlayersReady.size;
 
-    log(`Player ${playerId} ready in shop (${readyCount}/${totalPlayers})`, 'GAME');
+    log(`Player ready in shop (${readyCount}/${totalPlayers})`, 'SHOP');
 
     // Notify all players of ready status
     broadcast({
@@ -2928,7 +2999,7 @@ function handleShopReady(playerId) {
 
     // Check if all players are ready
     if (readyCount >= totalPlayers) {
-        log('All players ready - closing shop', 'SUCCESS');
+        log('All players ready - closing shop', 'SHOP');
         closeShop();
     }
 }
@@ -2951,7 +3022,7 @@ function closeShop() {
         action: 'allReady'
     });
 
-    log(`Shop closed, starting wave ${GameState.wave}`, 'GAME');
+    log(`Shop closed, starting wave ${GameState.wave}`, 'SHOP');
 
     // Start next wave after brief delay
     setTimeout(() => {
@@ -2961,7 +3032,193 @@ function closeShop() {
     }, 1000);
 }
 
-// ==================== GAME CONTROL ====================
+// ==================== ROOM-SPECIFIC WAVE & SHOP FUNCTIONS ====================
+// These ensure multiplayer rooms are completely isolated from each other
+
+function nextWaveInRoom(room) {
+    if (!room) return;
+
+    // Deactivate boss mode when wave completes
+    const wasBossWave = room.bossMode;
+    if (room.bossMode) {
+        room.bossMode = false;
+    }
+
+    // Calculate wave bonus (synced with client formula)
+    const completedWave = room.wave;
+    const waveBonus = wasBossWave
+        ? 2000 + completedWave * 200
+        : 500 + completedWave * 100;
+
+    room.wave++;
+    room.totalScore += waveBonus;
+
+    log(`Wave ${completedWave} complete! Bonus: ${waveBonus}`, 'WAVE', room.id);
+
+    // Open shop for all players in this room
+    openShopInRoom(room, waveBonus);
+}
+
+function openShopInRoom(room, waveBonus = 500) {
+    if (!room) return;
+
+    room.shopOpen = true;
+    room.shopPlayersReady.clear();
+    room.isPaused = true;
+
+    // Notify players in this room only
+    broadcastToRoom(room, {
+        type: 'waveComplete',
+        wave: room.wave - 1,
+        nextWave: room.wave,
+        bonus: waveBonus,
+        showShop: true
+    });
+
+    const aliveCount = Array.from(room.players.values()).filter(p => p.isAlive).length;
+    log(`Upgrade shop opened for ${aliveCount} players`, 'SHOP', room.id);
+
+    // Start shop timeout (30 seconds max)
+    if (room.shopTimeout) {
+        clearTimeout(room.shopTimeout);
+    }
+    const roomId = room.id;
+    room.shopTimeout = setTimeout(() => {
+        const currentRoom = gameRooms.get(roomId);
+        if (currentRoom && currentRoom.shopOpen) {
+            log('Shop timeout - forcing close', 'SHOP', roomId);
+            closeShopInRoom(currentRoom);
+        }
+    }, SHOP_MAX_TIME);
+}
+
+function handleShopReadyInRoom(playerId) {
+    const room = getPlayerRoom(playerId);
+    if (!room || !room.shopOpen) return;
+
+    room.shopPlayersReady.add(playerId);
+    // Only count alive players (spectators don't need to confirm)
+    const alivePlayers = Array.from(room.players.values()).filter(p => p.isAlive);
+    const totalPlayers = alivePlayers.length;
+    const readyCount = room.shopPlayersReady.size;
+
+    log(`Player ready in shop (${readyCount}/${totalPlayers})`, 'SHOP', room.id);
+
+    // Notify players in this room only
+    broadcastToRoom(room, {
+        type: 'shopSync',
+        action: 'playerReady',
+        playerId: playerId,
+        readyCount: readyCount,
+        totalPlayers: totalPlayers
+    });
+
+    // Check if all players are ready
+    if (readyCount >= totalPlayers) {
+        log('All players ready - closing shop', 'SHOP', room.id);
+        closeShopInRoom(room);
+    }
+}
+
+function closeShopInRoom(room) {
+    if (!room || !room.shopOpen) return;
+
+    room.shopOpen = false;
+    room.shopPlayersReady.clear();
+    room.isPaused = false;
+
+    if (room.shopTimeout) {
+        clearTimeout(room.shopTimeout);
+        room.shopTimeout = null;
+    }
+
+    // Notify players in this room only
+    broadcastToRoom(room, {
+        type: 'shopSync',
+        action: 'allReady'
+    });
+
+    log(`Shop closed, starting wave ${room.wave}`, 'SHOP', room.id);
+
+    // Start next wave after brief delay
+    const roomId = room.id;
+    setTimeout(() => {
+        const currentRoom = gameRooms.get(roomId);
+        if (currentRoom && currentRoom.isRunning) {
+            startWaveInRoom(currentRoom);
+        }
+    }, 1000);
+}
+
+// ==================== ROOM-SPECIFIC GAME CONTROL ====================
+function startGameInRoom(room) {
+    if (!room || room.isRunning) return;
+
+    log('Starting game...', 'GAME', room.id);
+
+    room.isRunning = true;
+    room.isInLobby = false;
+    room.isPaused = false;
+    room.wave = 1;
+    room.zombiesRemaining = 0;
+    room.zombiesSpawned = 0;
+    room.totalKills = 0;
+    room.totalScore = 0;
+    room.lastZombieId = 0;
+    room.lastPickupId = 0;
+
+    // Clear existing zombies and pickups (release to pool first)
+    room.zombies.forEach(zombie => ZombiePool.release(zombie));
+    room.zombies.clear();
+    room.pickups.clear();
+
+    // Reset all players in this room
+    room.players.forEach(player => {
+        player.health = 100;
+        player.isAlive = true;
+        player.kills = 0;
+        player.score = 0;
+        player.position = { x: (Math.random() - 0.5) * 10, y: 1.8, z: 10 + Math.random() * 5 };
+    });
+
+    broadcastToRoom(room, {
+        type: 'gameStart',
+        players: getPlayersDataFromRoom(room)
+    });
+
+    startWaveInRoom(room);
+
+    log('Game started!', 'SUCCESS', room.id);
+}
+
+function resetGameInRoom(room) {
+    if (!room) return;
+
+    stopGameInRoom(room);
+
+    // Reset player states
+    room.players.forEach(player => {
+        player.health = 100;
+        player.isAlive = true;
+        player.isReady = false;
+        player.kills = 0;
+        player.score = 0;
+    });
+
+    room.wave = 1;
+    room.zombiesRemaining = 0;
+    room.zombiesSpawned = 0;
+    room.totalKills = 0;
+    room.totalScore = 0;
+
+    broadcastToRoom(room, {
+        type: 'gameReset'
+    });
+
+    broadcastLobbyUpdateToRoom(room);
+}
+
+// ==================== LEGACY GAME CONTROL (for backward compatibility) ====================
 function startGame() {
     if (GameState.isRunning) return;
 
@@ -3034,7 +3291,7 @@ function gameOver() {
 // Room-specific game over
 function gameOverInRoom(room) {
     if (!room) return;
-    log(`Game Over in room ${room.id}!`, 'ERROR');
+    log(`GAME OVER! Wave ${room.wave}, Score: ${room.totalScore}, Kills: ${room.totalKills}`, 'GAME', room.id);
 
     stopGameInRoom(room);
 
@@ -3244,7 +3501,7 @@ function stopGameInRoom(room) {
     room.shopOpen = false;
     room.shopPlayersReady.clear();
 
-    log(`Game stopped in room ${room.id}`, 'GAME');
+    log(`Game stopped`, 'GAME', room.id);
 }
 
 function setPlayerReady(playerId, isReady) {
@@ -3254,7 +3511,7 @@ function setPlayerReady(playerId, isReady) {
     const player = room.players.get(playerId);
     if (player) {
         player.isReady = isReady;
-        log(`Player ${player.name} is ${isReady ? 'READY' : 'not ready'} in room ${room.id}`, 'PLAYER');
+        log(`"${player.name}" is ${isReady ? 'READY' : 'not ready'}`, 'LOBBY', room.id);
         broadcastLobbyUpdateToRoom(room);
 
         // Check if all players are ready to start
@@ -3270,7 +3527,7 @@ function setPlayerReady(playerId, isReady) {
 function startLobbyCountdownInRoom(room) {
     if (!room || room.countdownTimer) return; // Already counting down
 
-    log(`All players ready in room ${room.id}! Starting countdown...`, 'GAME');
+    log(`All players ready! Starting countdown...`, 'LOBBY', room.id);
     room.countdownSeconds = 3;
 
     // Send initial countdown
@@ -3297,7 +3554,7 @@ function cancelLobbyCountdownInRoom(room) {
     if (room && room.countdownTimer) {
         clearInterval(room.countdownTimer);
         room.countdownTimer = null;
-        log(`Countdown cancelled in room ${room.id} - player unreadied`, 'GAME');
+        log(`Countdown cancelled - player unreadied`, 'LOBBY', room.id);
         broadcastToRoom(room, { type: 'lobbyCountdown', seconds: 0, cancelled: true });
     }
 }
@@ -3307,11 +3564,26 @@ function startMultiplayerGameInRoom(room) {
 
     room.isInLobby = false;
     room.isRunning = true;
+    room.isPaused = false;
+    room.wave = 1;
+    room.zombiesRemaining = 0;
+    room.zombiesSpawned = 0;
+    room.totalKills = 0;
+    room.totalScore = 0;
+    room.lastZombieId = 0;
+    room.lastPickupId = 0;
+
+    // Clear existing zombies and pickups (release to pool first)
+    room.zombies.forEach(zombie => ZombiePool.release(zombie));
+    room.zombies.clear();
+    room.pickups.clear();
 
     // Reset all players
     room.players.forEach(player => {
         player.health = 100;
         player.isAlive = true;
+        player.kills = 0;
+        player.score = 0;
         player.position = { x: (Math.random() - 0.5) * 10, y: 1.8, z: 10 + Math.random() * 5 };
     });
 
@@ -3320,7 +3592,7 @@ function startMultiplayerGameInRoom(room) {
         players: getPlayersDataFromRoom(room)
     });
 
-    log(`Multiplayer game started in room ${room.id}!`, 'SUCCESS');
+    log(`Game started with ${room.players.size} players!`, 'GAME', room.id);
     startWaveInRoom(room);
 }
 
@@ -3389,16 +3661,17 @@ function startWaveInRoom(room) {
     if (mapChanged) {
         room.currentMapId = targetMapId;
         setServerMap(targetMapId);  // Rebuild pathfinding for new map
-        log(`Map changed to ${targetMapId} for wave ${room.wave} in room ${room.id}`, 'GAME');
+        log(`Map changed to ${targetMapId}`, 'WAVE', room.id);
     }
 
     // Check if this is a boss wave (every 10th wave - synced with client)
     const isBossWave = room.wave > 0 && room.wave % 10 === 0;
     if (isBossWave) {
         room.bossMode = true;
+        log(`BOSS WAVE ${room.wave} starting with ${zombieCount} zombies`, 'BOSS', room.id);
+    } else {
+        log(`Wave ${room.wave} starting with ${zombieCount} zombies`, 'WAVE', room.id);
     }
-
-    log(`Starting Wave ${room.wave} with ${zombieCount} zombies in room ${room.id}`, 'GAME');
 
     broadcastToRoom(room, {
         type: 'waveStart',
@@ -3450,7 +3723,7 @@ wss.on('connection', (ws, request) => {
     const player = createPlayer(ws, playerId);
     const room = getPlayerRoom(playerId);
 
-    log(`New WebSocket connection from player ${playerId} (IP: ${ip}) in room ${room ? room.id : 'unknown'}`, 'INFO');
+    log(`WebSocket connected (IP: ${ip})`, 'NETWORK', room ? room.id : null);
 
     // Send initial lobby/game state to new player
     const initMessage = {
@@ -3482,7 +3755,7 @@ wss.on('connection', (ws, request) => {
         pickups: room ? getPickupsDataFromRoom(room) : []
     };
 
-    log(`Sending init to ${playerId}: inLobby=${room ? room.isInLobby : true}, gameRunning=${room ? room.isRunning : false}`, 'INFO');
+    log(`Sent init: inLobby=${room ? room.isInLobby : true}, gameRunning=${room ? room.isRunning : false}`, 'NETWORK', room ? room.id : null);
     ws.send(JSON.stringify(initMessage));
 
     // Broadcast new player to others in the same room
@@ -3533,12 +3806,12 @@ wss.on('connection', (ws, request) => {
         // Untrack this connection
         untrackIPConnection(ws._clientIP, ws);
         clientMessageRates.delete(playerId);
-        log(`WebSocket closed for ${playerId}`, 'WARN');
+        log(`WebSocket closed`, 'NETWORK', room ? room.id : null);
         removePlayer(playerId);
     });
 
     ws.on('error', (error) => {
-        log(`WebSocket error for ${playerId}: ${error.message}`, 'ERROR');
+        log(`WebSocket error: ${error.message}`, 'NETWORK', room ? room.id : null);
     });
 });
 
@@ -3748,16 +4021,18 @@ function handleMessage(playerId, message) {
 
         case 'requestStart':
             if (!room.isRunning && room.players.size > 0) {
-                startGame();
+                startGameInRoom(room);
             }
             break;
 
         case 'requestReset':
             if (room.isGameOver || !room.isRunning) {
-                resetGame();
+                resetGameInRoom(room);
+                const roomId = room.id;
                 setTimeout(() => {
-                    if (room.players.size > 0) {
-                        startGame();
+                    const currentRoom = gameRooms.get(roomId);
+                    if (currentRoom && currentRoom.players.size > 0) {
+                        startGameInRoom(currentRoom);
                     }
                 }, 1000);
             }
@@ -3815,7 +4090,7 @@ function handleMessage(playerId, message) {
             break;
 
         case 'shopReady':
-            handleShopReady(playerId);
+            handleShopReadyInRoom(playerId);
             break;
 
         case 'ping':
@@ -4017,6 +4292,8 @@ mainServer.listen(PORT, '0.0.0.0', () => {
         log(``, 'INFO');
         log(`Local:   http://localhost:${PORT}`, 'INFO');
     }
+    log(``, 'INFO');
+    log(`Log Types: PLAYER LOBBY WAVE COMBAT PICKUP SHOP BOSS NETWORK SYNC`, 'DEBUG');
     log(``, 'INFO');
     log(`Waiting for players to connect...`, 'INFO');
 });
