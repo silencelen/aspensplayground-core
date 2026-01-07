@@ -221,45 +221,137 @@ jobs:
           echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
           echo "Previous tag: $PREV_TAG"
 
-      - name: Generate changelog
+      - name: Generate verbose changelog
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
-          CURRENT_TAG="v$VERSION"
 
-          # Generate commit list
-          echo "## Aspen's Playground v$VERSION" > changelog.md
-          echo "" >> changelog.md
-          echo "Survive waves of zombies in this intense 3D multiplayer shooter!" >> changelog.md
-          echo "" >> changelog.md
+          # Create Node.js script for parsing commits with full context
+          cat > generate_changelog.js << 'NODESCRIPT'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
 
-          # Add changes since last release
-          echo "### Changes in this release" >> changelog.md
-          echo "" >> changelog.md
+          const version = process.argv[2];
+          const prevTag = process.argv[3];
 
-          git log --pretty=format:"- %s" ${PREV_TAG}..HEAD 2>/dev/null | grep -v "^- 🤖 Generated with" | head -30 >> changelog.md || echo "- Initial release" >> changelog.md
+          let changelog = `## Aspen's Playground v${version}\n\n`;
+          changelog += `Survive waves of zombies in this intense 3D multiplayer shooter!\n\n`;
 
-          echo "" >> changelog.md
-          echo "" >> changelog.md
+          // Get commits with full message (subject + body)
+          let commits = [];
+          try {
+            const delimiter = '---COMMIT_DELIMITER---';
+            const format = `%s${delimiter}%b${delimiter}%H`;
+            const log = execSync(
+              `git log --pretty=format:"${format}" ${prevTag}..HEAD`,
+              { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
+            );
 
-          # Add download info
-          echo "### Downloads" >> changelog.md
-          echo "" >> changelog.md
-          echo "| Platform | File | Description |" >> changelog.md
-          echo "|----------|------|-------------|" >> changelog.md
-          echo "| Windows | \`*-Setup.exe\` | **Installer** - Recommended, includes auto-updates |" >> changelog.md
-          echo "| Windows | \`*-Portable.exe\` | **Portable** - No installation, run anywhere |" >> changelog.md
-          echo "| macOS | \`.dmg\` | Disk image |" >> changelog.md
-          echo "| Linux | \`.AppImage\` | Universal Linux package |" >> changelog.md
-          echo "" >> changelog.md
-          echo "### System Requirements" >> changelog.md
-          echo "- **OS**: Windows 10+, macOS 10.15+, or Linux" >> changelog.md
-          echo "- **RAM**: 4GB minimum" >> changelog.md
-          echo "- **GPU**: WebGL 2.0 compatible" >> changelog.md
-          echo "" >> changelog.md
-          echo "---" >> changelog.md
-          echo "" >> changelog.md
-          echo "🎮 [Play in browser](https://aspensplayground.com) | 📖 [Wiki](https://github.com/silencelen/aspensplayground/wiki)" >> changelog.md
+            const entries = log.split(delimiter + delimiter).filter(e => e.trim());
+            commits = entries.map(entry => {
+              const parts = entry.split(delimiter);
+              return {
+                subject: (parts[0] || '').trim(),
+                body: (parts[1] || '').trim()
+              };
+            }).filter(c => c.subject && !c.subject.includes('🤖 Generated with'));
+          } catch (e) {
+            changelog += `### Changes in this release\n\n- Initial release\n\n`;
+            fs.writeFileSync('changelog.md', changelog);
+            process.exit(0);
+          }
+
+          if (commits.length === 0) {
+            changelog += `### Changes in this release\n\n- Initial release\n\n`;
+            fs.writeFileSync('changelog.md', changelog);
+            process.exit(0);
+          }
+
+          // Categorize commits
+          const fixes = [];
+          const features = [];
+          const other = [];
+
+          commits.forEach(c => {
+            const subjectLower = c.subject.toLowerCase();
+
+            // Clean body - remove bot signatures
+            let cleanBody = c.body
+              .replace(/🤖 Generated with.*$/gm, '')
+              .replace(/Co-Authored-By:.*$/gm, '')
+              .replace(/^\s*[\r\n]/gm, '')
+              .trim();
+
+            const entry = { subject: c.subject, body: cleanBody };
+
+            if (/^fix|crash|bug|error|broken|issue|resolve|repair|patch|correct/i.test(subjectLower)) {
+              fixes.push(entry);
+            } else if (/^add|implement|create|new|enhance|upgrade|improve|feat|support|include/i.test(subjectLower)) {
+              features.push(entry);
+            } else {
+              other.push(entry);
+            }
+          });
+
+          // Format a single entry with problem/solution/benefit structure
+          const formatEntry = (e) => {
+            let out = `#### ${e.subject}\n\n`;
+            if (e.body) {
+              // The commit body already contains the detailed explanation
+              out += `${e.body}\n`;
+            }
+            return out + '\n';
+          };
+
+          // Build changelog sections
+          if (fixes.length > 0) {
+            changelog += `### 🐛 Bug Fixes\n\n`;
+            changelog += `_Issues that were identified and resolved in this release:_\n\n`;
+            fixes.forEach(f => { changelog += formatEntry(f); });
+          }
+
+          if (features.length > 0) {
+            changelog += `### ✨ New Features & Improvements\n\n`;
+            changelog += `_New capabilities and enhancements added:_\n\n`;
+            features.forEach(f => { changelog += formatEntry(f); });
+          }
+
+          if (other.length > 0) {
+            changelog += `### 🔧 Other Changes\n\n`;
+            other.slice(0, 15).forEach(o => {
+              changelog += `- ${o.subject}\n`;
+            });
+            changelog += '\n';
+          }
+
+          fs.writeFileSync('changelog.md', changelog);
+          console.log('Changelog generated successfully');
+          NODESCRIPT
+
+          # Run the script
+          node generate_changelog.js "$VERSION" "$PREV_TAG"
+
+          # Append download info
+          cat >> changelog.md << 'DOWNLOADS'
+
+          ### Downloads
+
+          | Platform | File | Description |
+          |----------|------|-------------|
+          | Windows | `*-Setup.exe` | **Installer** - Recommended, includes auto-updates |
+          | Windows | `*-Portable.exe` | **Portable** - No installation, run anywhere |
+          | macOS | `.dmg` | Disk image |
+          | Linux | `.AppImage` | Universal Linux package |
+
+          ### System Requirements
+          - **OS**: Windows 10+, macOS 10.15+, or Linux
+          - **RAM**: 4GB minimum
+          - **GPU**: WebGL 2.0 compatible
+
+          ---
+
+          🎮 [Play in browser](https://aspensplayground.com) | 📖 [Wiki](https://github.com/silencelen/aspensplayground/wiki)
+          DOWNLOADS
 
           echo "Generated changelog:"
           cat changelog.md
