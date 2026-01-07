@@ -4509,6 +4509,10 @@ function handleServerMessage(message) {
             handlePickupCollected(message);
             break;
 
+        case 'pickupRejected':
+            showPickupMessage(message.reason || 'Cannot pick up item', true);
+            break;
+
         case 'pickupRemoved':
             handlePickupRemoved(message.pickupId);
             break;
@@ -9754,13 +9758,7 @@ function initMobileControls() {
         e.preventDefault();
         hapticFeedback(HAPTIC.BUTTON);
         if (nearbyPickup) {
-            if (GameState.mode === 'singleplayer') {
-                collectSinglePlayerPickup(nearbyPickup);
-            } else {
-                sendToServer({ type: 'collectPickup', pickupId: nearbyPickup });
-            }
-            nearbyPickup = null;
-            updateInteractPrompt();
+            tryCollectPickup(nearbyPickup);
         }
     }, { passive: false, signal });
 
@@ -9946,13 +9944,7 @@ function onKeyDown(event) {
         case 'KeyE':
             // Interact/pickup (only when alive)
             if (playerState.isAlive && nearbyPickup) {
-                if (GameState.mode === 'singleplayer') {
-                    collectSinglePlayerPickup(nearbyPickup);
-                } else {
-                    sendToServer({ type: 'collectPickup', pickupId: nearbyPickup });
-                }
-                nearbyPickup = null;
-                updateInteractPrompt();
+                tryCollectPickup(nearbyPickup);
             }
             break;
         // Weapon switching
@@ -12637,7 +12629,10 @@ function updateInteractPrompt() {
     const prompt = document.getElementById('interact-prompt');
     if (!prompt) return;
 
-    if (nearbyPickup && pickups.has(nearbyPickup)) {
+    // On mobile, don't show the "Press E" prompt - mobile has a dedicated pickup button
+    if (isMobile) {
+        prompt.style.display = 'none';
+    } else if (nearbyPickup && pickups.has(nearbyPickup)) {
         const pickup = pickups.get(nearbyPickup);
         const itemName = pickup.type === 'health' ? 'Health Pack' : 'Ammo Box';
         prompt.innerHTML = `Press <span class="key">E</span> to pick up ${itemName}`;
@@ -14688,22 +14683,103 @@ function spawnSinglePlayerPickup(position) {
     }, 30000);
 }
 
+// Try to collect a pickup - handles validation for both singleplayer and multiplayer
+function tryCollectPickup(pickupId) {
+    const pickup = pickups.get(pickupId);
+    if (!pickup) return false;
+
+    // Client-side validation for all modes
+    if (pickup.type === 'health' && playerState.health >= CONFIG.player.maxHealth) {
+        showPickupMessage('Already at full health!', true);
+        return false;
+    }
+    if (pickup.type === 'ammo' && weapon.reserveAmmo >= WEAPONS[weapon.current].reserveMax) {
+        showPickupMessage('Ammo already full!', true);
+        return false;
+    }
+    if (pickup.type === 'grenade' && weapon.grenades >= 10) {
+        showPickupMessage('Grenades already full!', true);
+        return false;
+    }
+
+    // Passed validation - proceed with collection
+    if (GameState.mode === 'singleplayer') {
+        collectSinglePlayerPickup(pickupId);
+    } else {
+        sendToServer({ type: 'collectPickup', pickupId: pickupId });
+    }
+
+    nearbyPickup = null;
+    updateInteractPrompt();
+    return true;
+}
+
+function showPickupMessage(message, isWarning = false) {
+    // Show message in debug log
+    DebugLog.log(message, isWarning ? 'warning' : 'success');
+
+    // Also show a temporary on-screen message
+    const existingMsg = document.getElementById('pickup-message');
+    if (existingMsg) existingMsg.remove();
+
+    const msgEl = document.createElement('div');
+    msgEl.id = 'pickup-message';
+    msgEl.textContent = message;
+    msgEl.style.cssText = `
+        position: fixed;
+        top: 30%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${isWarning ? 'rgba(180, 80, 0, 0.9)' : 'rgba(0, 120, 0, 0.9)'};
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 18px;
+        font-weight: bold;
+        z-index: 1000;
+        pointer-events: none;
+        opacity: 1;
+        transition: opacity 0.5s ease-out;
+    `;
+    document.body.appendChild(msgEl);
+
+    // Fade out after 1.5 seconds
+    setTimeout(() => {
+        msgEl.style.opacity = '0';
+    }, 1500);
+    setTimeout(() => msgEl.remove(), 2000);
+}
+
 function collectSinglePlayerPickup(pickupId) {
     const pickup = pickups.get(pickupId);
     if (!pickup) return;
+
+    // Check if player can actually use this pickup
+    if (pickup.type === 'health' && playerState.health >= CONFIG.player.maxHealth) {
+        showPickupMessage('Already at full health!', true);
+        return; // Don't collect, leave the pickup for later
+    }
+    if (pickup.type === 'ammo' && weapon.reserveAmmo >= WEAPONS[weapon.current].reserveMax) {
+        showPickupMessage('Ammo already full!', true);
+        return;
+    }
+    if (pickup.type === 'grenade' && weapon.grenades >= 10) {
+        showPickupMessage('Grenades already full!', true);
+        return;
+    }
 
     scene.remove(pickup.mesh);
     pickups.delete(pickupId);
 
     if (pickup.type === 'health') {
         playerState.health = Math.min(playerState.health + 25, CONFIG.player.maxHealth);
-        DebugLog.log('Collected health! +25 HP', 'success');
+        showPickupMessage('Collected health! +25 HP');
     } else if (pickup.type === 'ammo') {
         weapon.reserveAmmo = Math.min(weapon.reserveAmmo + 15, WEAPONS[weapon.current].reserveMax);
-        DebugLog.log('Collected ammo! +15', 'success');
+        showPickupMessage('Collected ammo! +15');
     } else if (pickup.type === 'grenade') {
         weapon.grenades = Math.min(weapon.grenades + 2, 10);
-        DebugLog.log('Collected grenades! +2', 'success');
+        showPickupMessage('Collected grenades! +2');
     }
 
     playSound('pickup');

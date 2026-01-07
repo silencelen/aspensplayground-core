@@ -2710,6 +2710,15 @@ function collectPickup(pickupId, playerId) {
         player.health = Math.min(player.health + 25, 100);
         collected = true;
         log(`Player ${playerId} collected health pickup (+25 HP)`, 'GAME');
+    } else if (pickup.type === 'health' && player.health >= 100) {
+        // Player at full health - send rejection message
+        if (player.ws && player.ws.readyState === 1) {
+            player.ws.send(JSON.stringify({
+                type: 'pickupRejected',
+                reason: 'Already at full health!'
+            }));
+        }
+        return;
     } else if (pickup.type === 'ammo') {
         collected = true;
         log(`Player ${playerId} collected ammo pickup (+15 ammo)`, 'GAME');

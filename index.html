@@ -8,7 +8,7 @@
 
     <!-- iOS Web App Support -->
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Aspen's Playground">
 
@@ -1093,20 +1093,27 @@
             display: flex;
             flex-direction: row;
             justify-content: center;
-            align-items: flex-start;
+            align-items: stretch;
             gap: 20px;
-            max-width: 800px;
+            max-width: 700px;
             width: 100%;
+            margin: 0 auto;
         }
 
         .gameover-stats-column {
             flex: 1;
-            max-width: 320px;
+            max-width: 300px;
+            width: 300px;
+            display: flex;
+            flex-direction: column;
         }
 
         .gameover-leaderboard-column {
             flex: 1;
-            max-width: 280px;
+            max-width: 300px;
+            width: 300px;
+            display: flex;
+            flex-direction: column;
         }
 
         .gameover-actions {
@@ -1133,21 +1140,27 @@
             border: 2px solid #444;
             border-radius: 10px;
             padding: 10px;
+            height: 100%;
+            box-sizing: border-box;
         }
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            height: 100%;
         }
 
         .stat-card {
             background: linear-gradient(180deg, rgba(40, 40, 40, 0.9), rgba(20, 20, 20, 0.9));
             border: 1px solid #555;
-            border-radius: 6px;
-            padding: 8px 5px;
+            border-radius: 8px;
+            padding: 12px 8px;
             text-align: center;
             transition: border-color 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         .stat-card:hover {
@@ -1155,7 +1168,7 @@
         }
 
         .stat-value {
-            font-size: 16px;
+            font-size: 20px;
             font-weight: bold;
             color: #fff;
             text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
@@ -1165,11 +1178,11 @@
         }
 
         .stat-label {
-            font-size: 9px;
+            font-size: 11px;
             color: #aaa;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-top: 2px;
+            margin-top: 4px;
         }
 
 
@@ -1190,7 +1203,9 @@
             padding: 10px 15px;
             margin: 0;
             min-width: auto;
-            max-height: 250px;
+            height: 100%;
+            max-height: none;
+            box-sizing: border-box;
         }
 
         #gameover-leaderboard .leaderboard-title {
