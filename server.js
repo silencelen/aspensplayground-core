@@ -4314,6 +4314,13 @@ function handleJoinPrivate(playerId, shortcode) {
         return;
     }
 
+    // Find the private room FIRST (before removing from any existing room)
+    const result = findPrivateRoom(shortcode);
+    if (result.error) {
+        sendToPlayer(playerId, { type: 'joinPrivateError', error: result.error });
+        return;
+    }
+
     // Check if player is already in a room
     const existingRoom = getPlayerRoom(playerId);
     if (existingRoom) {
@@ -4325,13 +4332,6 @@ function handleJoinPrivate(playerId, shortcode) {
             sendToPlayer(playerId, { type: 'joinPrivateError', error: 'Cannot leave current game' });
             return;
         }
-    }
-
-    // Find the private room
-    const result = findPrivateRoom(shortcode);
-    if (result.error) {
-        sendToPlayer(playerId, { type: 'joinPrivateError', error: result.error });
-        return;
     }
 
     const room = result;
