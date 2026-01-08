@@ -836,6 +836,36 @@
             margin-bottom: 20px;
         }
 
+        .multiplayer-button-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .sub-button {
+            background: transparent;
+            border: 1px solid rgba(255, 102, 0, 0.5);
+            color: #ff6600;
+            padding: 6px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .sub-button:hover {
+            background: rgba(255, 102, 0, 0.15);
+            border-color: #ff6600;
+            color: #ff8833;
+        }
+
+        .sub-button:focus {
+            outline: 2px solid yellow;
+            outline-offset: 2px;
+        }
+
         .player-name-container {
             margin-bottom: 25px;
             text-align: center;
@@ -3177,8 +3207,10 @@
         </div>
         <div class="mode-buttons" role="group" aria-label="Game mode selection">
             <button class="menu-button mode-button" id="singleplayer-button" aria-label="Start single player game">SINGLE PLAYER</button>
-            <button class="menu-button mode-button" id="multiplayer-button" aria-label="Start multiplayer game">MULTIPLAYER</button>
-            <button class="menu-button mode-button secondary" id="join-private-button" aria-label="Join private lobby with code">JOIN PRIVATE</button>
+            <div class="multiplayer-button-group">
+                <button class="menu-button mode-button" id="multiplayer-button" aria-label="Start multiplayer game">MULTIPLAYER</button>
+                <button class="sub-button" id="join-private-button" aria-label="Join private lobby with code">or join private lobby</button>
+            </div>
         </div>
         <div class="menu-buttons-corner">
             <button class="menu-button cosmetics-button" id="cosmetics-button" aria-label="Open character customization">COSMETICS</button>
