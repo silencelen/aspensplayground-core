@@ -1108,14 +1108,14 @@ app.post('/api/leaderboard/singleplayer', singleplayerLimiter, (req, res) => {
 
     // ==================== ANTI-CHEAT VALIDATION ====================
     // These limits are based on realistic gameplay analysis:
-    // - Max realistic wave in singleplayer: ~30 (very skilled player)
-    // - Max kills per wave: ~20-30 average
-    // - Max score per kill: ~300 (headshot bonus on high-value zombie)
-    // - Wave completion bonuses: ~500-2000 per wave
+    // - Max realistic wave in singleplayer: ~35 (extremely skilled player)
+    // - Max kills per wave: ~15-25 average, scaling with wave
+    // - Max score per kill: ~200 average (headshot bonus on high-value zombie)
+    // - Wave completion bonuses: ~500-1500 per wave
 
-    const MAX_REALISTIC_WAVE = 50;      // Very generous upper limit
-    const MAX_REALISTIC_KILLS = 1000;   // ~20 kills/wave * 50 waves
-    const MAX_REALISTIC_SCORE = 150000; // Generous cap for legitimate play
+    const MAX_REALISTIC_WAVE = 40;      // Tightened from 50
+    const MAX_REALISTIC_KILLS = 700;    // ~18 kills/wave * 40 waves
+    const MAX_REALISTIC_SCORE = 100000; // Tightened from 150000
 
     // Type validation
     if (typeof score !== 'number' || !Number.isFinite(score)) {
@@ -1153,8 +1153,15 @@ app.post('/api/leaderboard/singleplayer', singleplayerLimiter, (req, res) => {
 
     // Wave/kills ratio check (should have ~5-30 kills per wave on average)
     const killsPerWave = wave > 0 ? kills / wave : 0;
-    if (wave > 1 && (killsPerWave < 3 || killsPerWave > 50)) {
+    if (wave > 1 && (killsPerWave < 3 || killsPerWave > 40)) {
         log(`Singleplayer rejected: suspicious ${killsPerWave.toFixed(1)} kills/wave (wave=${wave}, kills=${kills})`, 'WARN');
+        return res.status(400).json({ error: 'Score validation failed' });
+    }
+
+    // Score/wave ratio check (max ~3000 points per wave on average)
+    const scorePerWave = wave > 0 ? score / wave : 0;
+    if (wave > 1 && scorePerWave > 3500) {
+        log(`Singleplayer rejected: suspicious ${scorePerWave.toFixed(0)} score/wave (score=${score}, wave=${wave})`, 'WARN');
         return res.status(400).json({ error: 'Score validation failed' });
     }
 
