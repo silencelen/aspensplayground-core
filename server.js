@@ -807,7 +807,8 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
-// ==================== API RATE LIMITING ====================
+// ==================== RATE LIMITING ====================
+// Strict rate limiter for API endpoints
 const apiLimiter = rateLimit({
     windowMs: RATE_LIMIT.api.windowMs,
     max: RATE_LIMIT.api.maxRequests,
@@ -820,7 +821,22 @@ const apiLimiter = rateLimit({
     }
 });
 
-// Apply rate limiting to API endpoints
+// General rate limiter for all routes (more permissive)
+const generalLimiter = rateLimit({
+    windowMs: 60 * 1000,  // 1 minute
+    max: 100,             // 100 requests per minute (covers static files, health checks, etc.)
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting for WebSocket upgrade requests
+        return req.headers.upgrade === 'websocket';
+    }
+});
+
+// Apply general rate limiting to all routes first
+app.use(generalLimiter);
+
+// Apply stricter rate limiting to API endpoints
 app.use('/api/', apiLimiter);
 
 // ==================== IP MANAGEMENT HELPERS ====================
