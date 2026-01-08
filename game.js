@@ -374,6 +374,7 @@ function updateSettingsUI() {
 // ==================== MULTIPLAYER STATE ====================
 let socket = null;
 let pendingPrivateJoin = null; // Track pending private lobby join (needs global scope)
+let pendingCreatePrivate = false; // Track pending private lobby creation (needs global scope)
 let localPlayerId = null;
 let localPlayerData = null;
 let sessionToken = null;  // Server-issued session token for authenticated actions
@@ -4313,6 +4314,14 @@ function connectToServer() {
             console.log('[JOIN-PRIVATE] joinPrivate message sent');
         }
 
+        // Handle pending private lobby creation (if user clicked CREATE NEW PRIVATE LOBBY)
+        if (typeof pendingCreatePrivate !== 'undefined' && pendingCreatePrivate) {
+            pendingCreatePrivate = false;
+            console.log('[CREATE-PRIVATE] Processing pendingCreatePrivate');
+            DebugLog.log('Creating private lobby after connection', 'net');
+            sendToServer({ type: 'createPrivateLobby' });
+        }
+
         // Start latency tracking
         startPingInterval();
     };
@@ -4905,13 +4914,28 @@ function handleAfkKicked(message) {
     DebugLog.log('Kicked for AFK: ' + message.reason, 'warn');
     alert(message.reason || 'You were removed for not readying up');
 
-    // Disconnect and return to main menu
+    // Reset connection state BEFORE closing socket to prevent auto-reconnect
+    GameState.isInLobby = false;
+    GameState.isReady = false;
+    GameState.mode = null;
+    reconnectAttempts = MAX_RECONNECT_ATTEMPTS; // Prevent reconnection attempts
+
+    // Disconnect
     if (socket) {
         socket.close();
-        socket = null;
     }
-    showScreen('start-screen');
-    resetGameState();
+    socket = null;
+    reconnectAttempts = 0; // Reset for future connections
+
+    // Clear lobby state
+    LobbyState.players.clear();
+    LobbyState.afkKickPlayerId = null;
+    LobbyState.afkKickSeconds = 0;
+
+    // Return to main menu
+    setElementDisplay('lobby-screen', 'none');
+    setElementDisplay('multiplayer-lobby', 'none');
+    setElementDisplay('start-screen', 'flex');
 }
 
 // Handle successful private lobby creation
@@ -4946,13 +4970,23 @@ function handleCreatePrivateLobbyError(message) {
 
 // Create a new private lobby (escape from public lobby or start fresh)
 function createPrivateLobby() {
-    if (!socket || !GameState.isConnected) {
-        DebugLog.log('Cannot create private lobby - not connected', 'warn');
-        const errorEl = document.getElementById('join-private-error');
-        if (errorEl) {
-            errorEl.textContent = 'Not connected to server';
-            errorEl.style.display = 'block';
-        }
+    // Check for player name first
+    const playerName = getPlayerName();
+    if (!playerName) {
+        pendingCreatePrivate = true;
+        const modal = document.getElementById('join-private-modal');
+        if (modal) modal.style.display = 'none';
+        showNamePopup('createPrivate');
+        return;
+    }
+
+    // If not connected, connect first then create
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        DebugLog.log('Not connected - connecting first, then creating private lobby', 'net');
+        pendingCreatePrivate = true;
+        const modal = document.getElementById('join-private-modal');
+        if (modal) modal.style.display = 'none';
+        connectToServer();
         return;
     }
 

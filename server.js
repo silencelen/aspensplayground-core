@@ -3866,6 +3866,12 @@ function kickAfkPlayer(room, playerId) {
     removePlayerFromRoom(playerId, room);
     roomlessPlayers.delete(playerId);
 
+    // Broadcast playerLeft to remaining players so they clean up the mesh
+    broadcastToRoom(room, {
+        type: 'playerLeft',
+        playerId: playerId
+    });
+
     // Close their WebSocket
     if (player.ws && player.ws.readyState === WebSocket.OPEN) {
         player.ws.close();
