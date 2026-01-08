@@ -2104,7 +2104,13 @@ const CONFIG = {
         pellets: [1, 1.25, 1.5, 1.75, 2, 2.5]       // For shotgun
     },
     maxUpgradeLevel: 5,
-    tickRate: 20 // Server updates per second (reduced from 20 for less lag)
+    tickRate: 20, // Server updates per second (reduced from 20 for less lag)
+    // Player movement validation
+    player: {
+        maxSpeed: 12,           // Max sprint speed (8 base * 1.5 sprint)
+        speedTolerance: 2.5,    // Multiplier for network latency tolerance
+        maxTeleportWarnings: 3  // Warnings before logging as suspicious
+    }
 };
 
 // Valid weapon names for validation
@@ -2140,6 +2146,9 @@ function createPlayer(ws, id) {
             laserGun: { damage: 0 }
         },
         lastUpdate: Date.now(),
+        lastValidPosition: null,  // For speed validation
+        lastPositionTime: Date.now(),
+        teleportWarnings: 0,      // Count of suspicious movements
         kills: 0,
         score: 0
     };
@@ -4390,11 +4399,53 @@ function handleMessage(playerId, message) {
         case 'update':
             // Validate and update player position and rotation
             if (message.position && isValidPosition(message.position)) {
-                player.position = {
+                const newPos = {
                     x: message.position.x,
                     y: message.position.y,
                     z: message.position.z
                 };
+
+                // Speed validation - check if movement is within allowed speed
+                const now = Date.now();
+                if (player.lastValidPosition && room.isRunning) {
+                    const deltaTime = (now - player.lastPositionTime) / 1000; // seconds
+
+                    // Only validate if reasonable time has passed (avoid division issues)
+                    if (deltaTime > 0.01) {
+                        const dx = newPos.x - player.lastValidPosition.x;
+                        const dz = newPos.z - player.lastValidPosition.z;
+                        const distance = Math.sqrt(dx * dx + dz * dz);
+                        const speed = distance / deltaTime;
+
+                        // Max allowed speed with tolerance for network latency
+                        const maxAllowedSpeed = CONFIG.player.maxSpeed * CONFIG.player.speedTolerance;
+
+                        if (speed > maxAllowedSpeed) {
+                            player.teleportWarnings++;
+
+                            // Log suspicious movement after threshold
+                            if (player.teleportWarnings > CONFIG.player.maxTeleportWarnings) {
+                                log(`Suspicious movement from ${player.name}: ${speed.toFixed(1)} units/s (max: ${maxAllowedSpeed})`, 'WARN');
+                            }
+
+                            // Clamp position to maximum allowed distance from last position
+                            const maxDistance = maxAllowedSpeed * deltaTime;
+                            const ratio = maxDistance / distance;
+                            newPos.x = player.lastValidPosition.x + dx * ratio;
+                            newPos.z = player.lastValidPosition.z + dz * ratio;
+                        } else {
+                            // Reset warnings on valid movement
+                            if (player.teleportWarnings > 0) {
+                                player.teleportWarnings = Math.max(0, player.teleportWarnings - 1);
+                            }
+                        }
+                    }
+                }
+
+                // Update position
+                player.position = newPos;
+                player.lastValidPosition = { ...newPos };
+                player.lastPositionTime = now;
             }
             if (message.rotation && isValidRotation(message.rotation)) {
                 player.rotation = {
