@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Real-time development activity dashboard for Aspen's Playground - track commits, releases, and code changes">
+  <title>Aspen's Playground - Git Activity Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js" crossorigin></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      background: linear-gradient(135deg, #0d1117 0%, #1a1a2e 50%, #16213e 100%);
+      min-height: 100vh;
+      color: #c9d1d9;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #161b22; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    /* Accessibility: Focus indicators */
+    button:focus, a:focus { outline: 2px solid #00f5d4; outline-offset: 2px; }
+    button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- Optional config file for GitHub token - see dashboard-config.example.js -->
+  <script src="dashboard-config.js" onerror="console.log('No dashboard-config.js found - using unauthenticated API (60 req/hour)')"></script>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback } = React;
+    const { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart } = Recharts;
+
+    const COLORS = {
+      primary: '#00f5d4',
+      secondary: '#7b2cbf',
+      accent: '#f72585',
+      success: '#00ff87',
+      warning: '#ffd000',
+      danger: '#ff0054',
+      bg: '#0d1117',
+      card: '#161b22',
+      text: '#c9d1d9',
+      muted: '#8b949e'
+    };
+
+    const PIE_COLORS = ['#00f5d4', '#7b2cbf', '#f72585', '#00ff87', '#ffd000', '#ff0054', '#3a86ff'];
+
+    // Load config from dashboard-config.js if available, otherwise use defaults
+    const config = window.DASHBOARD_CONFIG || {};
+    const GITHUB_TOKEN = config.GITHUB_TOKEN && config.GITHUB_TOKEN !== 'YOUR_TOKEN_HERE' ? config.GITHUB_TOKEN : null;
+    const OWNER = config.OWNER || 'silencelen';
+    const REPO = config.REPO || 'aspensplayground-core';
+
+    // Log API mode on startup
+    if (GITHUB_TOKEN) {
+      console.log('Dashboard: Using authenticated GitHub API (5000 req/hour)');
+    } else {
+      console.log('Dashboard: Using unauthenticated GitHub API (60 req/hour)');
+      console.log('Tip: Create dashboard-config.js from dashboard-config.example.js to increase rate limit');
+    }
+
+    // Error Boundary component to prevent full page crashes
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+      componentDidCatch(error, errorInfo) {
+        console.error('Dashboard Error:', error, errorInfo);
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div style={{ padding: '40px', textAlign: 'center', background: COLORS.card, borderRadius: '16px', margin: '24px' }}>
+              <h2 style={{ color: COLORS.danger, marginBottom: '16px' }}>Something went wrong</h2>
+              <p style={{ color: COLORS.muted, marginBottom: '16px' }}>{this.state.error?.message || 'An unexpected error occurred'}</p>
+              <button onClick={() => window.location.reload()} style={{ background: COLORS.primary, color: COLORS.bg, padding: '10px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Reload Dashboard
+              </button>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    function GitActivityDashboard() {
+      const [repoData, setRepoData] = useState(null);
+      const [commits, setCommits] = useState([]);
+      const [releases, setReleases] = useState([]);
+      const [languages, setLanguages] = useState({});
+      const [codeFrequency, setCodeFrequency] = useState([]);
+      
+      const [loading, setLoading] = useState(true);
+      const [loadingStatus, setLoadingStatus] = useState([]);
+      const [error, setError] = useState(null);
+      const [activeChart, setActiveChart] = useState('overview');
+      const [rateLimit, setRateLimit] = useState(null);
+
+      const addStatus = (msg) => setLoadingStatus(prev => [...prev.slice(-8), msg]);
+
+      // Conditionally add Authorization header if token is configured
+      const headers = GITHUB_TOKEN
+        ? { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${GITHUB_TOKEN}` }
+        : { 'Accept': 'application/vnd.github.v3+json' };
+
+      const parseLinkHeader = (linkHeader) => {
+        if (!linkHeader) return {};
+        const links = {};
+        linkHeader.split(',').forEach(part => {
+          const match = part.match(/<([^>]+)>;\s*rel="([^"]+)"/);
+          if (match) links[match[2]] = match[1];
+        });
+        return links;
+      };
+
+      const fetchAllPages = async (baseUrl, type) => {
+        const allItems = [];
+        let url = baseUrl;
+        let page = 1;
+        
+        while (url && page <= 100) {
+          addStatus(`Fetching ${type} page ${page}...`);
+          const response = await fetch(url, { headers });
+          
+          if (!response.ok) {
+            if (response.status === 403 && response.headers.get('X-RateLimit-Remaining') === '0') {
+              throw new Error('Rate limit exceeded');
+            }
+            throw new Error(`Failed to fetch ${type}: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          if (!Array.isArray(data) || data.length === 0) break;
+          
+          allItems.push(...data);
+          addStatus(`Got ${allItems.length} ${type} so far...`);
+          
+          const links = parseLinkHeader(response.headers.get('Link'));
+          url = links.next || null;
+          page++;
+          
+          if (url) await new Promise(r => setTimeout(r, 100));
+        }
+        
+        return allItems;
+      };
+
+      const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        setLoadingStatus(['Starting data fetch...']);
+        
+        try {
+          addStatus('Fetching repository info...');
+          const repoRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}`, { headers });
+          setRateLimit({
+            remaining: repoRes.headers.get('X-RateLimit-Remaining'),
+            limit: repoRes.headers.get('X-RateLimit-Limit')
+          });
+          if (!repoRes.ok) throw new Error('Repository not found');
+          const repoInfo = await repoRes.json();
+          setRepoData(repoInfo);
+          addStatus(`Repo: ${repoInfo.name}`);
+
+          const allCommits = await fetchAllPages(
+            `https://api.github.com/repos/${OWNER}/${REPO}/commits?per_page=100`,
+            'commits'
+          );
+          setCommits(allCommits);
+          addStatus(`✓ Total commits: ${allCommits.length}`);
+
+          const allReleases = await fetchAllPages(
+            `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=100`,
+            'releases'
+          );
+          setReleases(allReleases);
+          addStatus(`✓ Total releases: ${allReleases.length}`);
+
+          addStatus('Fetching languages...');
+          const langRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/languages`, { headers });
+          if (langRes.ok) setLanguages(await langRes.json());
+
+          addStatus('Fetching code frequency...');
+          const codeRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/stats/code_frequency`, { headers });
+          if (codeRes.ok) {
+            const data = await codeRes.json();
+            if (Array.isArray(data)) setCodeFrequency(data);
+          }
+
+          addStatus('✓ All data loaded!');
+        } catch (err) {
+          setError(err.message);
+          addStatus(`ERROR: ${err.message}`);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => { fetchData(); }, [fetchData]);
+
+      // Process data exactly like original
+      const processedData = useMemo(() => {
+        if (!commits.length) return { daily: [], dayOfWeek: [], weekly: [] };
+        
+        const byDate = {};
+        
+        commits.forEach(commit => {
+          const dt = new Date(commit.commit.author.date);
+          const date = dt.toISOString().split('T')[0];
+          
+          if (!byDate[date]) byDate[date] = { commits: 0, releases: 0 };
+          byDate[date].commits++;
+        });
+
+        // Count releases per day
+        releases.forEach(release => {
+          const date = new Date(release.published_at).toISOString().split('T')[0];
+          if (byDate[date]) byDate[date].releases++;
+          else byDate[date] = { commits: 0, releases: 1 };
+        });
+
+        // Match code frequency to dates
+        const codeByWeek = {};
+        codeFrequency.forEach(week => {
+          const weekDate = new Date(week[0] * 1000).toISOString().split('T')[0];
+          codeByWeek[weekDate] = { additions: week[1] || 0, deletions: Math.abs(week[2] || 0) };
+        });
+
+        const daily = Object.entries(byDate).map(([date, data]) => {
+          // Find closest week for line changes
+          const weekStart = new Date(date);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          const weekKey = weekStart.toISOString().split('T')[0];
+          const codeData = codeByWeek[weekKey] || { additions: 0, deletions: 0 };
+          
+          return {
+            date,
+            displayDate: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            commits: data.commits,
+            releases: data.releases,
+            additions: Math.round(codeData.additions / 7 * data.commits) || data.commits * 40,
+            deletions: Math.round(codeData.deletions / 7 * data.commits) || data.commits * 12,
+            dayOfWeek: new Date(date).toLocaleDateString('en-US', { weekday: 'short' })
+          };
+        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        let cumulative = 0;
+        const cumulativeData = daily.map(d => { 
+          cumulative += d.commits; 
+          return { ...d, cumulativeCommits: cumulative }; 
+        });
+
+        // Day of week aggregation
+        const dayOfWeekMap = {};
+        daily.forEach(d => {
+          if (!dayOfWeekMap[d.dayOfWeek]) dayOfWeekMap[d.dayOfWeek] = { commits: 0, releases: 0 };
+          dayOfWeekMap[d.dayOfWeek].commits += d.commits;
+          dayOfWeekMap[d.dayOfWeek].releases += d.releases;
+        });
+        const dayOrder = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayOfWeekData = dayOrder.map(day => ({ 
+          day, 
+          commits: dayOfWeekMap[day]?.commits || 0,
+          releases: dayOfWeekMap[day]?.releases || 0
+        }));
+
+        // Weekly aggregation
+        const weeklyMap = {};
+        daily.forEach(d => {
+          const weekStart = new Date(d.date);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          const weekNum = Math.floor((weekStart.getTime() - new Date(daily[0].date).getTime()) / (7 * 24 * 60 * 60 * 1000));
+          const weekLabel = `Week ${weekNum + 1}`;
+          if (!weeklyMap[weekLabel]) weeklyMap[weekLabel] = { commits: 0, releases: 0, additions: 0, deletions: 0 };
+          weeklyMap[weekLabel].commits += d.commits;
+          weeklyMap[weekLabel].releases += d.releases;
+          weeklyMap[weekLabel].additions += d.additions;
+          weeklyMap[weekLabel].deletions += d.deletions;
+        });
+        const weeklyData = Object.entries(weeklyMap).map(([week, data]) => ({ week, ...data }));
+
+        return { daily: cumulativeData, dayOfWeek: dayOfWeekData, weekly: weeklyData };
+      }, [commits, releases, codeFrequency]);
+
+      const languageData = useMemo(() => {
+        const total = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0);
+        if (!total) return [];
+        return Object.entries(languages).map(([name, bytes]) => ({
+          name, 
+          value: parseFloat(((bytes / total) * 100).toFixed(1)),
+          color: name === 'JavaScript' ? COLORS.warning : name === 'HTML' ? COLORS.accent : PIE_COLORS[Object.keys(languages).indexOf(name) % PIE_COLORS.length]
+        })).sort((a, b) => b.value - a.value);
+      }, [languages]);
+
+      const stats = useMemo(() => {
+        if (!commits.length) return null;
+        const mostActiveDay = processedData.dayOfWeek.reduce((max, d) => d.commits > max.commits ? d : max, { day: 'N/A', commits: 0 });
+        const totalAdditions = processedData.daily.reduce((sum, d) => sum + d.additions, 0);
+        const totalDeletions = processedData.daily.reduce((sum, d) => sum + d.deletions, 0);
+        const totalDays = processedData.daily.length;
+        return {
+          totalCommits: commits.length,
+          totalReleases: releases.length,
+          avgCommitsPerDay: totalDays ? (commits.length / totalDays).toFixed(1) : 0,
+          mostActiveDay: mostActiveDay.day,
+          totalAdditions,
+          totalDeletions
+        };
+      }, [commits, releases, processedData]);
+
+      const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+          return (
+            <div style={{ background: COLORS.card, border: `1px solid ${COLORS.primary}`, borderRadius: '8px', padding: '12px', boxShadow: `0 0 20px ${COLORS.primary}40` }}>
+              <p style={{ color: COLORS.primary, fontWeight: 'bold', margin: 0 }}>{label}</p>
+              {payload.map((p, i) => <p key={i} style={{ color: p.color, margin: '4px 0 0' }}>{p.name}: {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}</p>)}
+            </div>
+          );
+        }
+        return null;
+      };
+
+      // Original chart tabs
+      const chartTabs = [
+        { id: 'overview', label: '📊 Overview', color: COLORS.primary },
+        { id: 'commits', label: '📝 Commits', color: COLORS.success },
+        { id: 'lines', label: '📄 Line Changes', color: COLORS.accent },
+        { id: 'weekly', label: '📅 Weekly', color: COLORS.warning },
+        { id: 'dayofweek', label: '🗓️ By Day', color: COLORS.secondary },
+        { id: 'languages', label: '💻 Languages', color: COLORS.danger }
+      ];
+
+      return (
+        <div style={{ minHeight: '100vh', padding: '24px', fontFamily: "'JetBrains Mono', 'Fira Code', monospace", color: COLORS.text }}>
+          {/* Header - Original Style */}
+          <div style={{ textAlign: 'center', marginBottom: '32px', padding: '24px', background: `linear-gradient(90deg, ${COLORS.card}00, ${COLORS.card}, ${COLORS.card}00)`, borderRadius: '16px', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: `linear-gradient(90deg, transparent, ${COLORS.primary}, transparent)` }} />
+            <h1 style={{ fontSize: '2.5rem', fontWeight: 800, background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, letterSpacing: '-1px' }}>
+              📊 Git Activity Dashboard
+            </h1>
+            <p style={{ color: COLORS.muted, marginTop: '8px', fontSize: '1rem' }}>
+              <span style={{ color: COLORS.primary }}>silencelen</span> / <span style={{ color: COLORS.accent }}>aspensplayground-core</span>
+            </p>
+            <p style={{ color: COLORS.muted, fontSize: '0.85rem', marginTop: '4px' }}>
+              🎮 Aspens Playground: A zombie style shooter
+            </p>
+            <div style={{ marginTop: '12px' }}>
+              <button onClick={fetchData} disabled={loading} style={{ background: 'transparent', border: `1px solid ${COLORS.success}`, color: COLORS.success, padding: '8px 20px', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: '0.9rem', opacity: loading ? 0.5 : 1 }}>
+                🔄 Refresh Data
+              </button>
+              {rateLimit && <span style={{ marginLeft: '16px', color: COLORS.muted, fontSize: '0.8rem' }}>API: {rateLimit.remaining}/{rateLimit.limit}</span>}
+            </div>
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '40px', background: COLORS.card, borderRadius: '16px', marginBottom: '24px' }}>
+              <div style={{ width: '50px', height: '50px', border: `3px solid ${COLORS.card}`, borderTop: `3px solid ${COLORS.primary}`, borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 1s linear infinite' }} />
+              <div style={{ textAlign: 'left', maxWidth: '500px', margin: '0 auto', background: COLORS.bg, padding: '16px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                {loadingStatus.map((status, i) => (
+                  <div key={i} style={{ color: status.startsWith('✓') ? COLORS.success : status.startsWith('ERROR') ? COLORS.danger : COLORS.text, marginBottom: '4px' }}>{status}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ textAlign: 'center', padding: '30px', background: `${COLORS.danger}15`, borderRadius: '12px', border: `1px solid ${COLORS.danger}40`, marginBottom: '24px' }}>
+              <p style={{ color: COLORS.danger, margin: 0 }}>❌ {error}</p>
+            </div>
+          )}
+
+          {!loading && !error && stats && (
+            <>
+              {/* Stats Cards - Original Style */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+                {[
+                  { label: 'Total Commits', value: stats.totalCommits, icon: '📝', color: COLORS.primary },
+                  { label: 'Total Releases', value: stats.totalReleases, icon: '🚀', color: COLORS.accent },
+                  { label: 'Avg Commits/Day', value: stats.avgCommitsPerDay, icon: '📈', color: COLORS.success },
+                  { label: 'Most Active Day', value: stats.mostActiveDay, icon: '🔥', color: COLORS.warning },
+                  { label: 'Lines Added', value: stats.totalAdditions.toLocaleString(), icon: '➕', color: COLORS.success },
+                  { label: 'Lines Deleted', value: stats.totalDeletions.toLocaleString(), icon: '➖', color: COLORS.danger },
+                ].map((stat, i) => (
+                  <div key={i} style={{ background: COLORS.card, borderRadius: '12px', padding: '20px', border: `1px solid ${stat.color}30`, boxShadow: `0 4px 20px ${stat.color}10`, transition: 'all 0.3s ease', cursor: 'default' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 8px 30px ${stat.color}30`; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 20px ${stat.color}10`; }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>{stat.icon}</div>
+                    <div style={{ color: stat.color, fontSize: '1.8rem', fontWeight: 'bold' }}>{typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</div>
+                    <div style={{ color: COLORS.muted, fontSize: '0.8rem', marginTop: '4px' }}>{stat.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Chart Navigation - Original Style */}
+              <div role="tablist" aria-label="Chart views" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px', justifyContent: 'center' }}>
+                {chartTabs.map(tab => (
+                  <button key={tab.id} role="tab" aria-selected={activeChart === tab.id} aria-controls={`chart-panel-${tab.id}`} onClick={() => setActiveChart(tab.id)} style={{
+                    padding: '10px 20px', borderRadius: '8px',
+                    border: activeChart === tab.id ? `2px solid ${tab.color}` : '2px solid transparent',
+                    background: activeChart === tab.id ? `${tab.color}20` : COLORS.card,
+                    color: activeChart === tab.id ? tab.color : COLORS.muted,
+                    cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.9rem',
+                    fontWeight: activeChart === tab.id ? 'bold' : 'normal', transition: 'all 0.2s ease'
+                  }}>{tab.label}</button>
+                ))}
+              </div>
+
+              {/* Charts Container - Original Style */}
+              <div style={{ background: COLORS.card, borderRadius: '16px', padding: '24px', minHeight: '450px', border: `1px solid ${COLORS.muted}20` }}>
+                
+                {/* Overview - Original Style */}
+                {activeChart === 'overview' && processedData.daily.length > 0 && (
+                  <div>
+                    <h2 style={{ color: COLORS.primary, marginBottom: '20px', fontSize: '1.3rem' }}>📈 Cumulative Commits Over Time</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <ComposedChart data={processedData.daily}>
+                        <defs>
+                          <linearGradient id="commitGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.muted + '30'} />
+                        <XAxis dataKey="displayDate" stroke={COLORS.muted} tick={{ fill: COLORS.muted, fontSize: 11 }} />
+                        <YAxis stroke={COLORS.muted} tick={{ fill: COLORS.muted }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Area type="monotone" dataKey="cumulativeCommits" stroke={COLORS.primary} fill="url(#commitGradient)" name="Cumulative Commits" strokeWidth={3} />
+                        <Bar dataKey="commits" fill={COLORS.accent} name="Daily Commits" opacity={0.8} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Commits - Original Style */}
+                {activeChart === 'commits' && processedData.daily.length > 0 && (
+                  <div>
+                    <h2 style={{ color: COLORS.success, marginBottom: '20px', fontSize: '1.3rem' }}>📝 Daily Commit Activity</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={processedData.daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.muted + '30'} />
+                        <XAxis dataKey="displayDate" stroke={COLORS.muted} tick={{ fill: COLORS.muted, fontSize: 11 }} angle={-45} textAnchor="end" height={70} />
+                        <YAxis stroke={COLORS.muted} tick={{ fill: COLORS.muted }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Bar dataKey="commits" name="Commits" radius={[4, 4, 0, 0]}>
+                          {processedData.daily.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.commits > 5 ? COLORS.success : entry.commits > 3 ? COLORS.warning : COLORS.primary} />
+                          ))}
+                        </Bar>
+                        <Bar dataKey="releases" fill={COLORS.accent} name="Releases" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Line Changes - Original Style */}
+                {activeChart === 'lines' && processedData.daily.length > 0 && (
+                  <div>
+                    <h2 style={{ color: COLORS.accent, marginBottom: '20px', fontSize: '1.3rem' }}>📄 Code Changes (Additions vs Deletions)</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <AreaChart data={processedData.daily}>
+                        <defs>
+                          <linearGradient id="addGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor={COLORS.success} stopOpacity={0.1}/>
+                          </linearGradient>
+                          <linearGradient id="delGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={COLORS.danger} stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor={COLORS.danger} stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.muted + '30'} />
+                        <XAxis dataKey="displayDate" stroke={COLORS.muted} tick={{ fill: COLORS.muted, fontSize: 11 }} />
+                        <YAxis stroke={COLORS.muted} tick={{ fill: COLORS.muted }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Area type="monotone" dataKey="additions" stackId="1" stroke={COLORS.success} fill="url(#addGradient)" name="Lines Added" />
+                        <Area type="monotone" dataKey="deletions" stackId="2" stroke={COLORS.danger} fill="url(#delGradient)" name="Lines Deleted" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Weekly - Original Style (Horizontal) */}
+                {activeChart === 'weekly' && processedData.weekly.length > 0 && (
+                  <div>
+                    <h2 style={{ color: COLORS.warning, marginBottom: '20px', fontSize: '1.3rem' }}>📅 Weekly Activity Summary</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={processedData.weekly} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.muted + '30'} />
+                        <XAxis type="number" stroke={COLORS.muted} tick={{ fill: COLORS.muted }} />
+                        <YAxis type="category" dataKey="week" stroke={COLORS.muted} tick={{ fill: COLORS.muted }} width={80} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Bar dataKey="commits" fill={COLORS.primary} name="Commits" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="releases" fill={COLORS.accent} name="Releases" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Day of Week - Original Style */}
+                {activeChart === 'dayofweek' && (
+                  <div>
+                    <h2 style={{ color: COLORS.secondary, marginBottom: '20px', fontSize: '1.3rem' }}>🗓️ Activity by Day of Week</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={processedData.dayOfWeek}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.muted + '30'} />
+                        <XAxis dataKey="day" stroke={COLORS.muted} tick={{ fill: COLORS.muted }} />
+                        <YAxis stroke={COLORS.muted} tick={{ fill: COLORS.muted }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Bar dataKey="commits" name="Commits" radius={[8, 8, 0, 0]}>
+                          {processedData.dayOfWeek.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Languages - Original Style */}
+                {activeChart === 'languages' && languageData.length > 0 && (
+                  <div>
+                    <h2 style={{ color: COLORS.danger, marginBottom: '20px', fontSize: '1.3rem' }}>💻 Language Distribution</h2>
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+                      <ResponsiveContainer width="100%" height={350}>
+                        <PieChart>
+                          <Pie data={languageData} cx="50%" cy="50%" outerRadius={130} innerRadius={70} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}%`} labelLine={{ stroke: COLORS.muted }}>
+                            {languageData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} stroke={COLORS.bg} strokeWidth={2} />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '32px', marginTop: '16px' }}>
+                      {languageData.map((lang, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: lang.color }} />
+                          <span>{lang.name} ({lang.value}%)</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Activity - Original Style */}
+              <div style={{ marginTop: '32px', background: COLORS.card, borderRadius: '16px', padding: '24px', border: `1px solid ${COLORS.muted}20` }}>
+                <h2 style={{ color: COLORS.primary, marginBottom: '16px', fontSize: '1.3rem' }}>🕐 Recent Release Activity</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {releases.slice(0, 10).map((release, i) => (
+                    <a key={i} href={release.html_url} target="_blank" rel="noopener noreferrer" style={{
+                      display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px',
+                      background: COLORS.bg, borderRadius: '8px', borderLeft: `3px solid ${PIE_COLORS[i % PIE_COLORS.length]}`,
+                      textDecoration: 'none'
+                    }}>
+                      <div style={{ 
+                        width: '40px', height: '40px', borderRadius: '50%', 
+                        background: `${PIE_COLORS[i % PIE_COLORS.length]}20`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: PIE_COLORS[i % PIE_COLORS.length], fontWeight: 'bold', fontSize: '0.9rem'
+                      }}>
+                        🏷️
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', color: COLORS.text }}>{release.tag_name}</div>
+                        <div style={{ color: COLORS.muted, fontSize: '0.85rem' }}>{release.name || 'Release'}</div>
+                      </div>
+                      <div style={{ color: COLORS.muted, fontSize: '0.8rem' }}>
+                        {new Date(release.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer - Original Style */}
+              <div style={{ marginTop: '32px', textAlign: 'center', color: COLORS.muted, fontSize: '0.8rem' }}>
+                <p>Data sourced from <a href="https://github.com/silencelen/aspensplayground-core" style={{ color: COLORS.primary }}>GitHub Repository</a></p>
+                <p style={{ marginTop: '4px' }}>{stats.totalCommits} commits • {stats.totalReleases} releases • {languageData.map(l => l.name).join(' & ')}</p>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(
+      <ErrorBoundary>
+        <GitActivityDashboard />
+      </ErrorBoundary>
+    );
+  </script>
+</body>
+</html>

@@ -33,3 +33,7 @@ ssl/
 # Generated/internal files
 *.pdf
 AUDIT_REPORT*.md
+DASHBOARD_AUDIT.md
+
+# Dashboard config (contains API tokens)
+dashboard-config.js
