@@ -3689,7 +3689,7 @@ function startLobbyCountdownInRoom(room) {
             clearInterval(room.countdownTimer);
             room.countdownTimer = null;
 
-            if (checkAllReadyInRoom(room) && room.state === ROOM_STATE.QUEUING) {
+            if (checkAllReadyInRoom(room) && (room.state === ROOM_STATE.QUEUING || room.state === ROOM_STATE.QUEUING_PRIVATE)) {
                 startMultiplayerGameInRoom(room);
             }
         }

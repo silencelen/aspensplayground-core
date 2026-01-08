@@ -4946,23 +4946,6 @@ function handleJoinPrivateError(message) {
     DebugLog.log(`Join private error: ${message.error}`, 'error');
 }
 
-// Update leader UI elements (private toggle, lobby ID display)
-function updatePrivateIndicator() {
-    const indicator = document.getElementById('private-lobby-indicator');
-    const codeDisplay = document.getElementById('private-code-display');
-
-    if (indicator) {
-        if (LobbyState.isPrivate) {
-            indicator.style.display = 'block';
-            if (codeDisplay) {
-                codeDisplay.textContent = LobbyState.shortcode || '------';
-            }
-        } else {
-            indicator.style.display = 'none';
-        }
-    }
-}
-
 function updateLeaderUI() {
     // Update private toggle visibility (only leader sees it)
     const privateToggle = document.getElementById('private-toggle');
@@ -4976,10 +4959,11 @@ function updateLeaderUI() {
         }
     }
 
-    // Update lobby ID display
+    // Update lobby ID display with Public/Private prefix
     const lobbyIdEl = document.getElementById('lobby-id');
     if (lobbyIdEl) {
-        lobbyIdEl.textContent = `Lobby: ${LobbyState.shortcode}`;
+        const prefix = LobbyState.isPrivate ? 'Private' : 'Public';
+        lobbyIdEl.innerHTML = `<strong>${prefix} Lobby:</strong> ${LobbyState.shortcode}`;
         if (LobbyState.isPrivate) {
             lobbyIdEl.classList.add('private');
             lobbyIdEl.title = 'Private lobby - share this code with friends';
@@ -4988,9 +4972,6 @@ function updateLeaderUI() {
             lobbyIdEl.title = '';
         }
     }
-
-    // Update private indicator for all players
-    updatePrivateIndicator();
 }
 
 function updateLobbyPlayerList() {
