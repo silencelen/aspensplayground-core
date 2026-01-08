@@ -2207,7 +2207,23 @@ function createPlayer(ws, id) {
 
 function removePlayer(id) {
     const room = getPlayerRoom(id);
-    if (!room) return;
+
+    // Clean up roomless player if not in a room
+    if (!room) {
+        const roomlessInfo = roomlessPlayers.get(id);
+        if (roomlessInfo) {
+            log(`Roomless player disconnected`, 'PLAYER');
+            roomlessPlayers.delete(id);
+            // Clean up game session
+            const sessionToken = playerIdToToken.get(id);
+            if (sessionToken) {
+                endGameSession(sessionToken);
+            }
+            // Clean up private room tracking
+            playerLastPrivateRoom.delete(id);
+        }
+        return;
+    }
 
     const player = room.players.get(id);
     if (player) {
