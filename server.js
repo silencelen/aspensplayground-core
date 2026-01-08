@@ -541,7 +541,13 @@ setInterval(() => {
 const app = express();
 
 // ==================== SSL CERTIFICATE CONFIGURATION ====================
-const DOMAIN = process.env.DOMAIN || 'aspensplayground.com';
+// Sanitize DOMAIN to prevent command injection in openssl execSync
+// Only allow valid domain characters: letters, numbers, hyphens, dots
+const RAW_DOMAIN = process.env.DOMAIN || 'aspensplayground.com';
+const DOMAIN = RAW_DOMAIN.replace(/[^a-zA-Z0-9.-]/g, '').substring(0, 253) || 'localhost';
+if (DOMAIN !== RAW_DOMAIN) {
+    console.warn(`WARNING: DOMAIN sanitized from "${RAW_DOMAIN}" to "${DOMAIN}"`);
+}
 
 // Certificate paths - priority order:
 // 1. Environment variables (SSL_KEY_PATH, SSL_CERT_PATH)
