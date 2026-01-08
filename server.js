@@ -1849,7 +1849,11 @@ function createGameRoom() {
         gameLoopInterval: null,
         currentMapId: 'dining_hall',  // Track current map
         bossMode: false,              // Track boss mode state
-        leaderId: null                // Player ID of the room leader (first to join)
+        leaderId: null,               // Player ID of the room leader (first to join)
+        // AFK kick countdown tracking (public lobbies only)
+        afkKickTimer: null,           // Timer interval for the 15s countdown
+        afkKickPlayerId: null,        // Which player has the AFK countdown active
+        afkKickSeconds: 0             // Remaining seconds before kick
     };
     gameRooms.set(roomId, room);
     log(`Created new game room: ${roomId}`, 'INFO');
@@ -3633,6 +3637,29 @@ function checkAllReadyInRoom(room) {
     return allReady;
 }
 
+// Check if all players except exactly one are ready (for AFK kick countdown)
+// Returns { allButOne: boolean, unreadyPlayerId: string|null }
+function checkAllButOneReadyInRoom(room) {
+    if (!room || room.players.size < 2) {
+        return { allButOne: false, unreadyPlayerId: null };
+    }
+
+    let unreadyCount = 0;
+    let unreadyPlayerId = null;
+
+    room.players.forEach((player, id) => {
+        if (!player.isReady) {
+            unreadyCount++;
+            unreadyPlayerId = id;
+        }
+    });
+
+    return {
+        allButOne: unreadyCount === 1,
+        unreadyPlayerId: unreadyCount === 1 ? unreadyPlayerId : null
+    };
+}
+
 function stopGameInRoom(room) {
     if (!room) return;
 
@@ -3658,6 +3685,12 @@ function stopGameInRoom(room) {
         clearTimeout(room.shopTimeout);
         room.shopTimeout = null;
     }
+    if (room.afkKickTimer) {
+        clearInterval(room.afkKickTimer);
+        room.afkKickTimer = null;
+        room.afkKickPlayerId = null;
+        room.afkKickSeconds = 0;
+    }
 
     // Release zombies to pool before clearing
     room.zombies.forEach(zombie => ZombiePool.release(zombie));
@@ -3681,12 +3714,31 @@ function setPlayerReady(playerId, isReady) {
         log(`"${player.name}" is ${isReady ? 'READY' : 'not ready'}`, 'LOBBY', room.id);
         broadcastLobbyUpdateToRoom(room);
 
+        // Cancel AFK kick if the targeted player readies up
+        if (isReady && room.afkKickPlayerId === playerId) {
+            cancelAfkKickCountdown(room);
+        }
+
         // Check if all players are ready to start
         if (checkAllReadyInRoom(room) && room.players.size >= 1 && !room.countdownTimer) {
+            cancelAfkKickCountdown(room); // Cancel any AFK timer since we're starting
             startLobbyCountdownInRoom(room);
         } else if (!checkAllReadyInRoom(room) && room.countdownTimer) {
             // Cancel countdown if someone un-readies
             cancelLobbyCountdownInRoom(room);
+        }
+
+        // Check for "all but one ready" condition (public lobbies only)
+        if (room.state === ROOM_STATE.QUEUING && !room.countdownTimer && !room.afkKickTimer) {
+            const { allButOne, unreadyPlayerId } = checkAllButOneReadyInRoom(room);
+            if (allButOne && unreadyPlayerId && room.players.size >= 2) {
+                startAfkKickCountdown(room, unreadyPlayerId);
+            }
+        }
+
+        // Cancel AFK kick if another player un-readied (no longer all-but-one)
+        if (!isReady && room.afkKickTimer && playerId !== room.afkKickPlayerId) {
+            cancelAfkKickCountdown(room);
         }
     }
 }
@@ -3723,6 +3775,116 @@ function cancelLobbyCountdownInRoom(room) {
         room.countdownTimer = null;
         log(`Countdown cancelled - player unreadied`, 'LOBBY', room.id);
         broadcastToRoom(room, { type: 'lobbyCountdown', seconds: 0, cancelled: true });
+    }
+}
+
+// ==================== AFK KICK COUNTDOWN (Public Lobbies Only) ====================
+
+// Start AFK kick countdown for a specific unready player
+function startAfkKickCountdown(room, playerId) {
+    if (!room || room.afkKickTimer) return;
+
+    // Only in public lobbies
+    if (room.state !== ROOM_STATE.QUEUING) return;
+
+    const player = room.players.get(playerId);
+    if (!player) return;
+
+    room.afkKickPlayerId = playerId;
+    room.afkKickSeconds = 15;
+
+    log(`Starting AFK kick countdown for "${player.name}" (15s)`, 'LOBBY', room.id);
+
+    // Broadcast initial state
+    broadcastAfkKickUpdate(room);
+
+    room.afkKickTimer = setInterval(() => {
+        room.afkKickSeconds--;
+
+        if (room.afkKickSeconds > 0) {
+            broadcastAfkKickUpdate(room);
+        } else {
+            // Time's up - kick the player
+            clearInterval(room.afkKickTimer);
+            room.afkKickTimer = null;
+
+            const kickedPlayerId = room.afkKickPlayerId;
+            room.afkKickPlayerId = null;
+            room.afkKickSeconds = 0;
+
+            kickAfkPlayer(room, kickedPlayerId);
+        }
+    }, 1000);
+}
+
+// Cancel AFK kick countdown
+function cancelAfkKickCountdown(room) {
+    if (!room || !room.afkKickTimer) return;
+
+    clearInterval(room.afkKickTimer);
+    room.afkKickTimer = null;
+
+    const playerId = room.afkKickPlayerId;
+    room.afkKickPlayerId = null;
+    room.afkKickSeconds = 0;
+
+    log(`AFK kick countdown cancelled`, 'LOBBY', room.id);
+
+    // Notify clients that countdown was cancelled
+    broadcastToRoom(room, {
+        type: 'afkKickUpdate',
+        playerId: null,
+        seconds: 0,
+        cancelled: true
+    });
+}
+
+// Broadcast AFK kick countdown state to all clients
+function broadcastAfkKickUpdate(room) {
+    broadcastToRoom(room, {
+        type: 'afkKickUpdate',
+        playerId: room.afkKickPlayerId,
+        seconds: room.afkKickSeconds,
+        cancelled: false
+    });
+}
+
+// Kick AFK player back to main menu
+function kickAfkPlayer(room, playerId) {
+    const player = room.players.get(playerId);
+    if (!player) return;
+
+    log(`Kicking AFK player "${player.name}" for not readying up`, 'LOBBY', room.id);
+
+    // Notify the player they are being kicked
+    sendToPlayer(playerId, {
+        type: 'afkKicked',
+        reason: 'You were removed for not readying up'
+    });
+
+    // Remove player from room
+    removePlayerFromRoom(playerId, room);
+    roomlessPlayers.delete(playerId);
+
+    // Close their WebSocket
+    if (player.ws && player.ws.readyState === WebSocket.OPEN) {
+        player.ws.close();
+    }
+
+    // Broadcast updated lobby to remaining players
+    broadcastLobbyUpdateToRoom(room);
+
+    // Clear the AFK state broadcast
+    broadcastToRoom(room, {
+        type: 'afkKickUpdate',
+        playerId: null,
+        seconds: 0,
+        cancelled: true
+    });
+
+    // Re-check ready state - might be able to start now
+    if (checkAllReadyInRoom(room) && room.players.size >= 1 && !room.countdownTimer) {
+        startLobbyCountdownInRoom(room);
     }
 }
 
@@ -4105,6 +4267,10 @@ function handleMessage(playerId, message) {
             handleTogglePrivate(playerId, room);
             break;
 
+        case 'createPrivateLobby':
+            handleCreatePrivateLobby(playerId, room);
+            break;
+
         case 'update':
             // Validate and update player position and rotation
             if (message.position && isValidPosition(message.position)) {
@@ -4338,6 +4504,116 @@ function handleTogglePrivate(playerId, room) {
         // Clean up the now-empty room
         cleanupEmptyRooms();
     }
+}
+
+// Handle any player creating their own private lobby (escape from public lobby)
+function handleCreatePrivateLobby(playerId, currentRoom) {
+    // Can be called from main menu (no room) or from public lobby
+    if (currentRoom && currentRoom.state !== ROOM_STATE.QUEUING) {
+        log(`Cannot create private lobby from state: ${currentRoom.state}`, 'WARN');
+        sendToPlayer(playerId, {
+            type: 'createPrivateLobbyError',
+            error: 'Can only create private lobby from main menu or public queue'
+        });
+        return;
+    }
+
+    // Get player info - either from room or from roomless players
+    let playerInfo = null;
+    if (currentRoom) {
+        const player = currentRoom.players.get(playerId);
+        if (player) {
+            playerInfo = {
+                ws: player.ws,
+                name: player.name,
+                cosmetic: player.cosmetic,
+                color: player.color
+            };
+        }
+    } else {
+        // Check roomless players
+        const roomlessPlayer = roomlessPlayers.get(playerId);
+        if (roomlessPlayer) {
+            playerInfo = {
+                ws: roomlessPlayer.ws,
+                name: roomlessPlayer.name || 'Player',
+                cosmetic: roomlessPlayer.cosmetic || 'steve',
+                color: roomlessPlayer.color || getRandomPlayerColor()
+            };
+        }
+    }
+
+    if (!playerInfo || !playerInfo.ws) {
+        log(`Cannot find player info for ${playerId}`, 'WARN');
+        sendToPlayer(playerId, {
+            type: 'createPrivateLobbyError',
+            error: 'Player not found'
+        });
+        return;
+    }
+
+    log(`Player "${playerInfo.name}" creating own private lobby`, 'LOBBY', currentRoom?.id);
+
+    // Remove from current room if in one
+    if (currentRoom) {
+        // Cancel any AFK countdown targeting this player
+        if (currentRoom.afkKickTimer && currentRoom.afkKickPlayerId === playerId) {
+            cancelAfkKickCountdown(currentRoom);
+        }
+
+        removePlayerFromRoom(playerId, currentRoom);
+        broadcastLobbyUpdateToRoom(currentRoom);
+    }
+
+    // Remove from roomless players
+    roomlessPlayers.delete(playerId);
+
+    // Create new private room
+    const newRoom = createGameRoom();
+    newRoom.state = ROOM_STATE.QUEUING_PRIVATE;
+
+    // Add player to new room as leader
+    const newPlayer = {
+        id: playerId,
+        ws: playerInfo.ws,
+        name: playerInfo.name,
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0 },
+        isReady: false,
+        isAlive: true,
+        health: 100,
+        maxHealth: 100,
+        score: 0,
+        kills: 0,
+        cosmetic: playerInfo.cosmetic || 'steve',
+        color: playerInfo.color || getRandomPlayerColor(),
+        currentWeapon: 'pistol',
+        ammo: CONFIG.weapons.pistol.magSize,
+        reserveAmmo: 30,
+        lastUpdate: Date.now()
+    };
+
+    newRoom.players.set(playerId, newPlayer);
+    playerRooms.set(playerId, newRoom.id);
+    newRoom.leaderId = playerId;
+
+    const shortcode = newRoom.id.substring(0, 6).toUpperCase();
+
+    log(`Created private lobby for "${playerInfo.name}" (code: ${shortcode})`, 'LOBBY', newRoom.id);
+
+    // Send success response to player
+    sendToPlayer(playerId, {
+        type: 'createPrivateLobbySuccess',
+        shortcode: shortcode,
+        isLeader: true,
+        roomId: newRoom.id
+    });
+
+    // Send full lobby update to establish state
+    broadcastLobbyUpdateToRoom(newRoom);
+
+    // Clean up empty rooms
+    cleanupEmptyRooms();
 }
 
 // Handle joining a private room via shortcode

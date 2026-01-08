@@ -909,7 +909,10 @@ const LobbyState = {
     leaderId: null,
     isPrivate: false,
     shortcode: '',
-    isLeader: false  // Convenience: localPlayerId === leaderId
+    isLeader: false,  // Convenience: localPlayerId === leaderId
+    // AFK kick countdown tracking
+    afkKickPlayerId: null,
+    afkKickSeconds: 0
 };
 
 // ==================== OPTIMIZATION SYSTEMS ====================
@@ -4486,6 +4489,22 @@ function handleServerMessage(message) {
             handleJoinPrivateError(message);
             break;
 
+        case 'afkKickUpdate':
+            handleAfkKickUpdate(message);
+            break;
+
+        case 'afkKicked':
+            handleAfkKicked(message);
+            break;
+
+        case 'createPrivateLobbySuccess':
+            handleCreatePrivateLobbySuccess(message);
+            break;
+
+        case 'createPrivateLobbyError':
+            handleCreatePrivateLobbyError(message);
+            break;
+
         case 'playerJoined':
             handlePlayerJoined(message.player);
             break;
@@ -4869,6 +4888,78 @@ function handleLobbyCountdown(message) {
     }
 }
 
+// Handle AFK kick countdown updates (public lobbies only)
+function handleAfkKickUpdate(message) {
+    if (message.cancelled) {
+        LobbyState.afkKickPlayerId = null;
+        LobbyState.afkKickSeconds = 0;
+    } else {
+        LobbyState.afkKickPlayerId = message.playerId;
+        LobbyState.afkKickSeconds = message.seconds;
+    }
+    updateLobbyPlayerList();
+}
+
+// Handle being kicked for AFK
+function handleAfkKicked(message) {
+    DebugLog.log('Kicked for AFK: ' + message.reason, 'warn');
+    alert(message.reason || 'You were removed for not readying up');
+
+    // Disconnect and return to main menu
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
+    showScreen('start-screen');
+    resetGameState();
+}
+
+// Handle successful private lobby creation
+function handleCreatePrivateLobbySuccess(message) {
+    DebugLog.log('Created private lobby: ' + message.shortcode, 'net');
+
+    // Close the join private modal if open
+    const modal = document.getElementById('join-private-modal');
+    if (modal) modal.style.display = 'none';
+
+    // Update lobby state
+    LobbyState.isPrivate = true;
+    LobbyState.shortcode = message.shortcode;
+    LobbyState.isLeader = message.isLeader;
+    LobbyState.roomId = message.roomId;
+    LobbyState.leaderId = localPlayerId;
+
+    // Show lobby screen
+    showScreen('multiplayer-lobby');
+    updateLeaderUI();
+}
+
+// Handle error creating private lobby
+function handleCreatePrivateLobbyError(message) {
+    DebugLog.log('Create private lobby error: ' + message.error, 'warn');
+    const errorEl = document.getElementById('join-private-error');
+    if (errorEl) {
+        errorEl.textContent = message.error;
+        errorEl.style.display = 'block';
+    }
+}
+
+// Create a new private lobby (escape from public lobby or start fresh)
+function createPrivateLobby() {
+    if (!socket || !GameState.isConnected) {
+        DebugLog.log('Cannot create private lobby - not connected', 'warn');
+        const errorEl = document.getElementById('join-private-error');
+        if (errorEl) {
+            errorEl.textContent = 'Not connected to server';
+            errorEl.style.display = 'block';
+        }
+        return;
+    }
+
+    DebugLog.log('Requesting to create private lobby', 'net');
+    sendToServer({ type: 'createPrivateLobby' });
+}
+
 // Handle leader change (when leader leaves or is transferred)
 function handleLeaderChange(message) {
     LobbyState.leaderId = message.leaderId;
@@ -4983,11 +5074,19 @@ function updateLobbyPlayerList() {
     LobbyState.players.forEach((player, id) => {
         const div = document.createElement('div');
         const isLeader = (id === LobbyState.leaderId);
-        div.className = 'lobby-player' + (player.isReady ? ' ready' : '') + (id === localPlayerId ? ' you' : '') + (isLeader ? ' leader' : '');
+        const hasAfkWarning = (id === LobbyState.afkKickPlayerId && LobbyState.afkKickSeconds > 0);
+
+        div.className = 'lobby-player' +
+            (player.isReady ? ' ready' : '') +
+            (id === localPlayerId ? ' you' : '') +
+            (isLeader ? ' leader' : '') +
+            (hasAfkWarning ? ' afk-warning' : '');
 
         const leaderBadge = isLeader ? '<span class="leader-badge" title="Room Leader">★</span>' : '';
+        const afkCountdown = hasAfkWarning ? `<span class="afk-countdown">${LobbyState.afkKickSeconds}s</span>` : '';
+
         div.innerHTML = `
-            <span class="player-name">${escapeHtml(player.name)}${leaderBadge}</span>
+            <span class="player-name">${escapeHtml(player.name)}${leaderBadge}${afkCountdown}</span>
             <span class="player-status ${player.isReady ? 'ready' : 'waiting'}">${player.isReady ? 'READY' : 'Waiting...'}</span>
         `;
 
@@ -15297,6 +15396,11 @@ function initEventListeners() {
         } else if (e.key === 'Escape') {
             hideJoinPrivateModal();
         }
+    });
+
+    // Create private lobby button in join modal
+    document.getElementById('create-private-button')?.addEventListener('click', () => {
+        createPrivateLobby();
     });
 
     // Name popup confirm button

@@ -1071,6 +1071,13 @@
             margin-bottom: 10px;
         }
 
+        .modal-divider {
+            color: #888;
+            margin: 20px 0 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+
         .modal-buttons {
             display: flex;
             gap: 15px;
@@ -1111,6 +1118,23 @@
         .lobby-player.ready {
             border-color: #00ff00;
             background: rgba(0, 100, 0, 0.3);
+        }
+
+        .lobby-player.afk-warning {
+            border-color: #ff4444;
+            animation: afk-pulse 1s infinite;
+        }
+
+        @keyframes afk-pulse {
+            0%, 100% { background: rgba(100, 0, 0, 0.3); }
+            50% { background: rgba(150, 0, 0, 0.5); }
+        }
+
+        .afk-countdown {
+            color: #ff4444;
+            font-weight: bold;
+            margin-left: 8px;
+            font-size: 14px;
         }
 
         .lobby-player .player-name {
@@ -5157,14 +5181,16 @@
     <!-- Join Private Lobby Modal -->
     <div id="join-private-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="join-private-title">
         <div class="modal-content">
-            <h2 class="modal-title" id="join-private-title">JOIN PRIVATE LOBBY</h2>
-            <p class="modal-description">Enter the 6-character lobby code</p>
+            <h2 class="modal-title" id="join-private-title">PRIVATE LOBBY</h2>
+            <p class="modal-description">Enter a 6-character lobby code to join</p>
             <input type="text" id="private-shortcode-input" class="shortcode-input" maxlength="6" placeholder="XXXXXX" autocomplete="off" aria-label="Enter lobby code">
             <div id="join-private-error" class="modal-error" style="display: none;"></div>
             <div class="modal-buttons">
                 <button class="menu-button" id="join-private-confirm">JOIN</button>
                 <button class="menu-button secondary" id="join-private-cancel">CANCEL</button>
             </div>
+            <div class="modal-divider">— or —</div>
+            <button class="menu-button" id="create-private-button" aria-label="Create a new private lobby">CREATE NEW PRIVATE LOBBY</button>
         </div>
     </div>
 
