@@ -373,6 +373,7 @@ function updateSettingsUI() {
 
 // ==================== MULTIPLAYER STATE ====================
 let socket = null;
+let pendingPrivateJoin = null; // Track pending private lobby join (needs global scope)
 let localPlayerId = null;
 let localPlayerData = null;
 let sessionToken = null;  // Server-issued session token for authenticated actions
@@ -4299,11 +4300,14 @@ function connectToServer() {
         if (typeof pendingPrivateJoin !== 'undefined' && pendingPrivateJoin) {
             const shortcode = pendingPrivateJoin;
             pendingPrivateJoin = null;
+            console.log('[JOIN-PRIVATE] Processing pendingPrivateJoin:', shortcode);
             DebugLog.log(`Joining private lobby: ${shortcode}`, 'net');
+            console.log('[JOIN-PRIVATE] Sending joinPrivate message to server');
             sendToServer({
                 type: 'joinPrivate',
                 shortcode: shortcode
             });
+            console.log('[JOIN-PRIVATE] joinPrivate message sent');
         }
 
         // Start latency tracking
@@ -4478,6 +4482,7 @@ function handleServerMessage(message) {
             break;
 
         case 'joinPrivateError':
+            console.log('[JOIN-PRIVATE] Received joinPrivateError from server:', message);
             handleJoinPrivateError(message);
             break;
 
@@ -4911,7 +4916,10 @@ function handlePrivateDisabled() {
 
 // Handle join private error
 function handleJoinPrivateError(message) {
+    console.log('[JOIN-PRIVATE] ========== handleJoinPrivateError called ==========');
+    console.log('[JOIN-PRIVATE] Error message:', message);
     const errorText = message.error || 'Failed to join private lobby';
+    console.log('[JOIN-PRIVATE] Showing error:', errorText);
     DebugLog.log(`Join private error: ${errorText}`, 'error');
 
     // Show the modal again with the error
@@ -15151,10 +15159,10 @@ function initEventListeners() {
         if (modal) modal.style.display = 'none';
     }
 
-    // Variable to track pending private join (for after socket connects)
-    let pendingPrivateJoin = null;
+    // Variable pendingPrivateJoin is now global (needed for socket.onopen access)
 
     function submitJoinPrivate() {
+        console.log('[JOIN-PRIVATE] submitJoinPrivate called');
         const input = document.getElementById('private-shortcode-input');
         const errorEl = document.getElementById('join-private-error');
 
@@ -15197,6 +15205,8 @@ function initEventListeners() {
     }
 
     function connectToPrivateLobby(shortcode, playerName) {
+        console.log('[JOIN-PRIVATE] connectToPrivateLobby called with:', shortcode, playerName);
+        console.log('[JOIN-PRIVATE] Socket state:', socket ? socket.readyState : 'no socket');
         hideJoinPrivateModal();
 
         // Connect to server if not connected

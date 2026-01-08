@@ -1851,18 +1851,30 @@ function findOrCreateLobby() {
 // Find a private room by its 6-character shortcode
 function findPrivateRoom(shortcode) {
     const upper = shortcode.toUpperCase();
+    log(`[JOIN-PRIVATE] Searching for room with code: ${upper}`, 'DEBUG');
+    log(`[JOIN-PRIVATE] Total rooms in gameRooms: ${gameRooms.size}`, 'DEBUG');
+
     for (const [roomId, room] of gameRooms) {
-        if (roomId.substring(0, 6).toUpperCase() === upper) {
+        const roomCode = roomId.substring(0, 6).toUpperCase();
+        log(`[JOIN-PRIVATE] Checking room ${roomCode} (state: ${room.state}, players: ${room.players.size})`, 'DEBUG');
+
+        if (roomCode === upper) {
+            log(`[JOIN-PRIVATE] Code matches! Room state: ${room.state}`, 'DEBUG');
             if (room.state === ROOM_STATE.QUEUING_PRIVATE ||
                 room.state === ROOM_STATE.PLAYING_PRIVATE ||
                 room.state === ROOM_STATE.GAME_OVER_PRIVATE) {
                 if (room.players.size < 8) {
+                    log(`[JOIN-PRIVATE] SUCCESS - Found valid private room`, 'DEBUG');
                     return room;
                 }
+                log(`[JOIN-PRIVATE] Room is full`, 'DEBUG');
                 return { error: 'Room is full' };
+            } else {
+                log(`[JOIN-PRIVATE] Room exists but is NOT private (state: ${room.state})`, 'DEBUG');
             }
         }
     }
+    log(`[JOIN-PRIVATE] No matching private room found for code: ${upper}`, 'DEBUG');
     return { error: 'Room not found' };
 }
 
@@ -4050,6 +4062,7 @@ function handleMessage(playerId, message) {
 
     // Handle joinPrivate - player joining via shortcode (may not have a room yet)
     if (message.type === 'joinPrivate') {
+        log(`[MSG] Received joinPrivate from ${playerId} with shortcode: ${message.shortcode}`, 'DEBUG');
         handleJoinPrivate(playerId, message.shortcode);
         return;
     }
@@ -4308,16 +4321,25 @@ function handleTogglePrivate(playerId, room) {
 
 // Handle joining a private room via shortcode
 function handleJoinPrivate(playerId, shortcode) {
+    log(`[JOIN-PRIVATE] ========== handleJoinPrivate called ==========`, 'DEBUG');
+    log(`[JOIN-PRIVATE] Player: ${playerId}, Shortcode: ${shortcode}`, 'DEBUG');
+
     // Validate shortcode
     if (!shortcode || typeof shortcode !== 'string' || shortcode.length !== 6) {
+        log(`[JOIN-PRIVATE] Invalid shortcode format: "${shortcode}"`, 'WARN');
         sendToPlayer(playerId, { type: 'joinPrivateError', error: 'Invalid shortcode format' });
         return;
     }
 
     // Find the private room FIRST (before removing from any existing room)
+    log(`[JOIN-PRIVATE] Calling findPrivateRoom...`, 'DEBUG');
     const result = findPrivateRoom(shortcode);
+    log(`[JOIN-PRIVATE] findPrivateRoom result: ${JSON.stringify(result.error || 'FOUND ROOM')}`, 'DEBUG');
+
     if (result.error) {
-        sendToPlayer(playerId, { type: 'joinPrivateError', error: result.error });
+        log(`[JOIN-PRIVATE] Sending error to player: ${result.error}`, 'WARN');
+        const sent = sendToPlayer(playerId, { type: 'joinPrivateError', error: result.error });
+        log(`[JOIN-PRIVATE] Error message sent: ${sent !== false}`, 'DEBUG');
         return;
     }
 
@@ -4444,27 +4466,42 @@ function handleJoinPrivate(playerId, shortcode) {
 
 // Helper to send message to specific player by ID
 function sendToPlayer(playerId, message) {
+    log(`[SEND-TO-PLAYER] Attempting to send ${message.type} to ${playerId}`, 'DEBUG');
+
     const room = getPlayerRoom(playerId);
     if (room) {
+        log(`[SEND-TO-PLAYER] Player found in room ${room.id.substring(0,6)}`, 'DEBUG');
         const player = room.players.get(playerId);
         if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
             try {
                 player.ws.send(JSON.stringify(message));
+                log(`[SEND-TO-PLAYER] SUCCESS - Sent via room player`, 'DEBUG');
+                return true;
             } catch (e) {
                 log(`Error sending to ${playerId}: ${e.message}`, 'ERROR');
+                return false;
             }
+        } else {
+            log(`[SEND-TO-PLAYER] Player in room but ws invalid`, 'WARN');
         }
     } else {
+        log(`[SEND-TO-PLAYER] Player NOT in any room, checking roomless...`, 'DEBUG');
         // Check roomless players
         const roomlessInfo = roomlessPlayers.get(playerId);
         if (roomlessInfo && roomlessInfo.ws && roomlessInfo.ws.readyState === WebSocket.OPEN) {
             try {
                 roomlessInfo.ws.send(JSON.stringify(message));
+                log(`[SEND-TO-PLAYER] SUCCESS - Sent via roomless`, 'DEBUG');
+                return true;
             } catch (e) {
                 log(`Error sending to roomless ${playerId}: ${e.message}`, 'ERROR');
+                return false;
             }
+        } else {
+            log(`[SEND-TO-PLAYER] Player NOT in roomless either! Message NOT sent.`, 'ERROR');
         }
     }
+    return false;
 }
 
 // Reset a private room for a new game (when first player rejoins after game over)
