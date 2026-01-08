@@ -3398,7 +3398,7 @@ function closeShopInRoom(room) {
     const roomId = room.id;
     setTimeout(() => {
         const currentRoom = gameRooms.get(roomId);
-        if (currentRoom && currentRoom.state === ROOM_STATE.PLAYING) {
+        if (currentRoom && (currentRoom.state === ROOM_STATE.PLAYING || currentRoom.state === ROOM_STATE.PLAYING_PRIVATE)) {
             startWaveInRoom(currentRoom);
         }
     }, 1000);
@@ -3406,7 +3406,7 @@ function closeShopInRoom(room) {
 
 // ==================== ROOM-SPECIFIC GAME CONTROL ====================
 function startGameInRoom(room) {
-    if (!room || room.state === ROOM_STATE.PLAYING) return;
+    if (!room || room.state === ROOM_STATE.PLAYING || room.state === ROOM_STATE.PLAYING_PRIVATE) return;
 
     log('Starting game...', 'GAME', room.id);
 
@@ -4567,7 +4567,9 @@ function handleMessage(playerId, message) {
             break;
 
         case 'requestReset':
-            if (room.isGameOver || !room.isRunning) {
+            // Allow reset if game is over or not running
+            const isGameOver = room.state === ROOM_STATE.GAME_OVER || room.state === ROOM_STATE.GAME_OVER_PRIVATE;
+            if (isGameOver || !room.isRunning) {
                 resetGameInRoom(room);
                 const roomId = room.id;
                 setTimeout(() => {
@@ -4884,14 +4886,14 @@ function handleJoinPrivate(playerId, shortcode) {
         resetPrivateRoomForNewGame(room);
     }
 
-    // Get player info (may be roomless or fresh connection)
+    // Get player info (must be roomless at this point)
     const roomlessInfo = roomlessPlayers.get(playerId);
-    const ws = roomlessInfo ? roomlessInfo.ws : wsToPlayerId.get(playerId);
 
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        log(`Join private failed - invalid websocket for ${playerId}`, 'WARN');
+    if (!roomlessInfo || !roomlessInfo.ws || roomlessInfo.ws.readyState !== WebSocket.OPEN) {
+        log(`Join private failed - player ${playerId} not found or invalid websocket`, 'WARN');
         return;
     }
+    const ws = roomlessInfo.ws;
 
     // Create player and add to room
     const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff, 0xff8844, 0x88ff44];
@@ -5172,8 +5174,8 @@ function handlePlayAgainRequest(playerId) {
             cosmetic: player.cosmetic
         },
         gameState: {
-            isRunning: room.state === ROOM_STATE.PLAYING,
-            isInLobby: room.state === ROOM_STATE.QUEUING,
+            isRunning: room.state === ROOM_STATE.PLAYING || room.state === ROOM_STATE.PLAYING_PRIVATE,
+            isInLobby: room.state === ROOM_STATE.QUEUING || room.state === ROOM_STATE.QUEUING_PRIVATE,
             wave: room.wave,
             zombiesRemaining: room.zombiesRemaining,
             totalKills: room.totalKills,
@@ -5183,7 +5185,7 @@ function handlePlayAgainRequest(playerId) {
         zombies: getZombiesDataFromRoom(room),
         pickups: getPickupsDataFromRoom(room),
         leaderId: room.leaderId,
-        isPrivate: room.state === ROOM_STATE.QUEUING_PRIVATE,
+        isPrivate: room.state === ROOM_STATE.QUEUING_PRIVATE || room.state === ROOM_STATE.PLAYING_PRIVATE || room.state === ROOM_STATE.GAME_OVER_PRIVATE,
         shortcode: room.id.substring(0, 6).toUpperCase()
     };
 
