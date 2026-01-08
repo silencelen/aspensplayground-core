@@ -32,6 +32,22 @@ const RATE_LIMIT = {
     }
 };
 
+// ==================== LOG LEVEL CONFIG ====================
+// Set via environment variable: LOG_LEVEL=DEBUG|INFO|WARN|ERROR
+// Production recommended: INFO or WARN
+const LOG_LEVELS = {
+    'DEBUG': 0,
+    'INFO': 1,
+    'WARN': 2,
+    'ERROR': 3,
+    'FATAL': 4,
+    // Game-specific types map to DEBUG level in production
+    'LOBBY': 0, 'WAVE': 0, 'COMBAT': 0, 'PICKUP': 0,
+    'PLAYER': 1, 'SYNC': 0, 'NETWORK': 0, 'GAME': 1, 'SHOP': 0, 'BOSS': 0,
+    'SUCCESS': 1
+};
+const CURRENT_LOG_LEVEL = LOG_LEVELS[process.env.LOG_LEVEL?.toUpperCase()] ?? LOG_LEVELS['DEBUG'];
+
 // Track connections and bans per IP
 const ipConnections = new Map();  // IP -> Set of WebSocket connections
 const ipBans = new Map();         // IP -> ban expiry timestamp
@@ -830,6 +846,20 @@ app.use(generalLimiter);
 // Apply stricter rate limiting to API endpoints
 app.use('/api/', apiLimiter);
 
+// Very strict rate limiter for singleplayer leaderboard submissions
+// Prevents leaderboard spam and makes score manipulation harder
+const singleplayerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,  // 1 hour window
+    max: 5,                     // 5 submissions per hour per IP
+    message: { error: 'Too many score submissions. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        log(`Singleplayer rate limit exceeded for IP: ${req.ip}`, 'WARN');
+        res.status(429).json({ error: 'Too many score submissions. Please try again later.' });
+    }
+});
+
 // Serve static files and parse JSON
 app.use(express.static(path.join(__dirname)));
 app.use(express.json());
@@ -1066,30 +1096,63 @@ app.post('/api/leaderboard', (req, res) => {
 });
 
 // Singleplayer score submission (no session required)
-// Less strict verification since singleplayer is inherently client-side
-app.post('/api/leaderboard/singleplayer', (req, res) => {
+// Strict validation to prevent leaderboard manipulation
+app.post('/api/leaderboard/singleplayer', singleplayerLimiter, (req, res) => {
     const { name, score, wave, kills } = req.body;
 
-    // Basic validation
-    if (typeof score !== 'number' || score <= 0 || score > 10000000) {
+    // ==================== ANTI-CHEAT VALIDATION ====================
+    // These limits are based on realistic gameplay analysis:
+    // - Max realistic wave in singleplayer: ~30 (very skilled player)
+    // - Max kills per wave: ~20-30 average
+    // - Max score per kill: ~300 (headshot bonus on high-value zombie)
+    // - Wave completion bonuses: ~500-2000 per wave
+
+    const MAX_REALISTIC_WAVE = 50;      // Very generous upper limit
+    const MAX_REALISTIC_KILLS = 1000;   // ~20 kills/wave * 50 waves
+    const MAX_REALISTIC_SCORE = 150000; // Generous cap for legitimate play
+
+    // Type validation
+    if (typeof score !== 'number' || !Number.isFinite(score)) {
         return res.status(400).json({ error: 'Invalid score' });
     }
-    if (typeof wave !== 'number' || wave < 1 || wave > 1000) {
+    if (typeof wave !== 'number' || !Number.isInteger(wave)) {
         return res.status(400).json({ error: 'Invalid wave' });
     }
-    if (typeof kills !== 'number' || kills < 0 || kills > 100000) {
+    if (typeof kills !== 'number' || !Number.isInteger(kills)) {
         return res.status(400).json({ error: 'Invalid kills' });
     }
 
-    // Sanity check: score should be roughly proportional to kills and wave
-    // This is a basic anti-cheat measure (not perfect, but catches obvious fakes)
-    const expectedMinScore = kills * 50; // Minimum ~50 points per kill
-    const expectedMaxScore = kills * 500 + wave * 1000; // Max ~500 per kill + wave bonus
-    if (score < expectedMinScore * 0.5 || score > expectedMaxScore * 2) {
-        log(`Singleplayer score rejected: suspicious ratio (score=${score}, kills=${kills}, wave=${wave})`, 'WARN');
+    // Absolute limits (reject obviously fake values)
+    if (score <= 0 || score > MAX_REALISTIC_SCORE) {
+        log(`Singleplayer rejected: score ${score} exceeds maximum ${MAX_REALISTIC_SCORE}`, 'WARN');
+        return res.status(400).json({ error: 'Score exceeds maximum allowed' });
+    }
+    if (wave < 1 || wave > MAX_REALISTIC_WAVE) {
+        log(`Singleplayer rejected: wave ${wave} exceeds maximum ${MAX_REALISTIC_WAVE}`, 'WARN');
+        return res.status(400).json({ error: 'Wave exceeds maximum allowed' });
+    }
+    if (kills < 0 || kills > MAX_REALISTIC_KILLS) {
+        log(`Singleplayer rejected: kills ${kills} exceeds maximum ${MAX_REALISTIC_KILLS}`, 'WARN');
+        return res.status(400).json({ error: 'Kills exceed maximum allowed' });
+    }
+
+    // Ratio validation (must have reasonable relationship between stats)
+    // Minimum: At least 50 points per kill (even basic zombies give 100)
+    // Maximum: No more than 250 points per kill on average (accounts for bonuses)
+    const pointsPerKill = kills > 0 ? score / kills : 0;
+    if (kills > 0 && (pointsPerKill < 50 || pointsPerKill > 250)) {
+        log(`Singleplayer rejected: suspicious ratio ${pointsPerKill.toFixed(1)} pts/kill (score=${score}, kills=${kills})`, 'WARN');
         return res.status(400).json({ error: 'Score validation failed' });
     }
 
+    // Wave/kills ratio check (should have ~5-30 kills per wave on average)
+    const killsPerWave = wave > 0 ? kills / wave : 0;
+    if (wave > 1 && (killsPerWave < 3 || killsPerWave > 50)) {
+        log(`Singleplayer rejected: suspicious ${killsPerWave.toFixed(1)} kills/wave (wave=${wave}, kills=${kills})`, 'WARN');
+        return res.status(400).json({ error: 'Score validation failed' });
+    }
+
+    // All checks passed - submit to leaderboard
     const result = addToLeaderboard(name, score, wave, kills);
     log(`Singleplayer leaderboard: ${name} submitted score ${score} (wave ${wave}, ${kills} kills)`, 'INFO');
 
@@ -1224,7 +1287,12 @@ function rotateLogIfNeeded(logFile) {
 
 // Enhanced logging with categories and room support
 // Usage: log(message, type) or log(message, type, roomId)
+// Respects LOG_LEVEL environment variable (DEBUG, INFO, WARN, ERROR)
 function log(message, type = 'INFO', roomId = null) {
+    // Skip if below configured log level
+    const typeLevel = LOG_LEVELS[type] ?? 0;
+    if (typeLevel < CURRENT_LOG_LEVEL) return;
+
     const timestamp = new Date().toISOString();
     const timeOnly = timestamp.split('T')[1].split('.')[0]; // HH:MM:SS
 
@@ -2068,6 +2136,31 @@ function createPlayer(ws, id) {
     // First player becomes the leader
     if (room.players.size === 1) {
         room.leaderId = id;
+    }
+
+    // Handle countdown states when new (unready) player joins
+    if (room.state === ROOM_STATE.QUEUING) {
+        // Cancel game starting countdown if active (new player breaks "all ready" condition)
+        if (room.countdownTimer) {
+            cancelLobbyCountdownInRoom(room);
+        }
+
+        // Cancel existing AFK countdown if it no longer applies
+        if (room.afkKickTimer) {
+            const { allButOne } = checkAllButOneReadyInRoom(room);
+            if (!allButOne) {
+                cancelAfkKickCountdown(room);
+            }
+        }
+
+        // Start AFK countdown if "all but one ready" condition is now true
+        // (e.g., everyone was ready, new player joins unready)
+        if (!room.afkKickTimer && !room.countdownTimer) {
+            const { allButOne, unreadyPlayerId } = checkAllButOneReadyInRoom(room);
+            if (allButOne && unreadyPlayerId && room.players.size >= 2) {
+                startAfkKickCountdown(room, unreadyPlayerId);
+            }
+        }
     }
 
     log(`Player "${player.name}" joined (${room.players.size} players)`, 'PLAYER', room.id);
@@ -4122,8 +4215,11 @@ wss.on('connection', (ws, request) => {
         if (!checkMessageRate(playerId)) {
             ws._messageViolations++;
             if (ws._messageViolations >= 3) {
-                // Too many violations, ban the IP
-                banIP(ws._clientIP, 'Message rate limit exceeded repeatedly');
+                // Too many violations, ban the IP (only log once)
+                if (!ws._banned) {
+                    ws._banned = true;
+                    banIP(ws._clientIP, 'Message rate limit exceeded repeatedly');
+                }
                 ws.close(1008, 'Rate limit exceeded');
                 return;
             }

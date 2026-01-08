@@ -272,10 +272,21 @@ function createWindow() {
         }, 5000); // 5 second delay
     });
 
+    // Certificate error handling - ONLY allow bypass in development mode
+    // In production, invalid certificates are rejected to prevent MITM attacks
     mainWindow.webContents.on('certificate-error', (event, url, error, certificate, callback) => {
         console.log('[Electron] Certificate error:', error, 'for URL:', url);
-        event.preventDefault();
-        callback(true);
+
+        if (!app.isPackaged) {
+            // Development mode: allow self-signed certs for localhost testing
+            console.log('[Electron] Development mode - allowing certificate bypass');
+            event.preventDefault();
+            callback(true);
+        } else {
+            // Production mode: reject invalid certificates for security
+            console.error('[Electron] Production mode - rejecting invalid certificate');
+            callback(false);
+        }
     });
 
     // Handle new window requests (target="_blank" links)
