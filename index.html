@@ -830,17 +830,17 @@
             outline-offset: 2px;
         }
 
-        .mode-buttons {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .multiplayer-button-group {
+        .mode-buttons-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .mode-buttons {
+            display: flex;
+            gap: 20px;
         }
 
         .sub-button {
@@ -3129,12 +3129,12 @@
             <label for="player-name-input" class="player-name-label">PLAYER NAME</label>
             <input type="text" id="player-name-input" class="player-name-input" placeholder="Enter your name..." maxlength="20">
         </div>
-        <div class="mode-buttons" role="group" aria-label="Game mode selection">
-            <button class="menu-button mode-button" id="singleplayer-button" aria-label="Start single player game">SINGLE PLAYER</button>
-            <div class="multiplayer-button-group">
+        <div class="mode-buttons-wrapper">
+            <div class="mode-buttons" role="group" aria-label="Game mode selection">
+                <button class="menu-button mode-button" id="singleplayer-button" aria-label="Start single player game">SINGLE PLAYER</button>
                 <button class="menu-button mode-button" id="multiplayer-button" aria-label="Start multiplayer game">MULTIPLAYER</button>
-                <button class="sub-button" id="join-private-button" aria-label="Join private lobby with code">or join private lobby</button>
             </div>
+            <button class="sub-button" id="join-private-button" aria-label="Join private lobby with code">or join private lobby</button>
         </div>
         <div class="menu-buttons-corner">
             <button class="menu-button cosmetics-button" id="cosmetics-button" aria-label="Open character customization">COSMETICS</button>
@@ -4026,6 +4026,10 @@
                 padding: 10px 25px !important;
             }
 
+            .mode-buttons-wrapper {
+                gap: 10px;
+            }
+
             .mode-buttons {
                 flex-direction: column;
                 gap: 10px;
@@ -4189,9 +4193,14 @@
 
 
 
-            .mode-buttons {
+            .mode-buttons-wrapper {
                 gap: 8px;
                 margin-bottom: 0;
+                width: 100%;
+            }
+
+            .mode-buttons {
+                gap: 8px;
                 justify-content: center;
                 align-items: center;
                 width: 100%;
