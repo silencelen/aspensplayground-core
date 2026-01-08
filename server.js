@@ -798,15 +798,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type']
 }));
 
-// Serve static files and parse JSON
-app.use(express.static(path.join(__dirname)));
-app.use(express.json());
-
-// Clean URL for dashboard
-app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
-
 // ==================== RATE LIMITING ====================
 // Strict rate limiter for API endpoints
 const apiLimiter = rateLimit({
@@ -833,11 +824,20 @@ const generalLimiter = rateLimit({
     }
 });
 
-// Apply general rate limiting to all routes first
+// Apply general rate limiting to all routes first (MUST be before route definitions)
 app.use(generalLimiter);
 
 // Apply stricter rate limiting to API endpoints
 app.use('/api/', apiLimiter);
+
+// Serve static files and parse JSON
+app.use(express.static(path.join(__dirname)));
+app.use(express.json());
+
+// Clean URL for dashboard (now protected by generalLimiter above)
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
 
 // ==================== IP MANAGEMENT HELPERS ====================
 function getClientIP(req) {
