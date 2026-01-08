@@ -35,5 +35,8 @@ ssl/
 AUDIT_REPORT*.md
 DASHBOARD_AUDIT.md
 
+# Build artifacts (use npm run build to generate)
+*.min.js
+
 # Dashboard config (contains API tokens)
 dashboard-config.js

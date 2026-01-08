@@ -4,7 +4,10 @@
   "description": "Multiplayer zombie shooter in a haunted arcade",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "npm run build:js && echo Build complete!",
+    "build:js": "terser game.js -o game.min.js -c -m && terser service-worker.js -o service-worker.min.js -c -m",
+    "build:analyze": "echo game.js: && wc -c game.js && echo game.min.js: && wc -c game.min.js 2>/dev/null || echo (run npm run build first)"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -18,6 +21,7 @@
     "canvas": "^3.2.0",
     "md-to-pdf": "^5.2.5",
     "pdf-lib": "^1.17.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "terser": "^5.27.0"
   }
 }
