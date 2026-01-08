@@ -1996,6 +1996,7 @@ function cleanupEmptyRooms() {
             if (room.spawnInterval) clearInterval(room.spawnInterval);
             if (room.countdownTimer) clearInterval(room.countdownTimer);
             if (room.gameLoopInterval) clearInterval(room.gameLoopInterval);
+            if (room.afkKickTimer) clearInterval(room.afkKickTimer);
             if (room.shopTimeout) clearTimeout(room.shopTimeout);
             gameRooms.delete(roomId);
             log(`Removed empty room: ${roomId}`, 'INFO');

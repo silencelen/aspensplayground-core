@@ -13146,7 +13146,7 @@ function resetSinglePlayerGame() {
 
     // Clear spawn timer
     if (GameState.spawnTimer) {
-        clearInterval(GameState.spawnTimer);
+        clearTimeout(GameState.spawnTimer);
         GameState.spawnTimer = null;
     }
 
@@ -15118,7 +15118,7 @@ async function singlePlayerGameOver() {
     GameState.isGameOver = true;
 
     if (GameState.spawnTimer) {
-        clearInterval(GameState.spawnTimer);
+        clearTimeout(GameState.spawnTimer);
         GameState.spawnTimer = null;
     }
 
