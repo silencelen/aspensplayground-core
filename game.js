@@ -1914,7 +1914,7 @@ const Achievements = {
                 });
             }
         } catch (e) {
-            console.log('Failed to load achievements (corrupted data)');
+            DebugLog.log('Failed to load achievements (corrupted data)', 'warn');
             // Clear corrupted data
             try {
                 localStorage.removeItem('aspensPlaygroundAchievements');
@@ -1932,7 +1932,7 @@ const Achievements = {
                 .map(a => a.id);
             localStorage.setItem('aspensPlaygroundAchievements', JSON.stringify(unlocked));
         } catch (e) {
-            console.log('Failed to save achievements');
+            DebugLog.log('Failed to save achievements', 'warn');
         }
     },
 
@@ -4254,13 +4254,12 @@ function connectToServer() {
     if (isElectron) {
         // Running in Electron/desktop app - connect to production server
         wsUrl = 'wss://aspensplayground.com';
-        console.log('[Electron] Detected desktop app, using production server');
+        DebugLog.log('[Electron] Detected desktop app, using production server', 'net');
     } else {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}`;
     }
 
-    console.log('[WebSocket] Protocol:', window.location.protocol, 'Host:', window.location.host, 'URL:', wsUrl);
     DebugLog.log(`Connecting to server: ${wsUrl}`, 'net');
 
     // Update status to show we're connecting
@@ -4315,20 +4314,16 @@ function connectToServer() {
         if (typeof pendingPrivateJoin !== 'undefined' && pendingPrivateJoin) {
             const shortcode = pendingPrivateJoin;
             pendingPrivateJoin = null;
-            console.log('[JOIN-PRIVATE] Processing pendingPrivateJoin:', shortcode);
             DebugLog.log(`Joining private lobby: ${shortcode}`, 'net');
-            console.log('[JOIN-PRIVATE] Sending joinPrivate message to server');
             sendToServer({
                 type: 'joinPrivate',
                 shortcode: shortcode
             });
-            console.log('[JOIN-PRIVATE] joinPrivate message sent');
         }
 
         // Handle pending private lobby creation (if user clicked CREATE NEW PRIVATE LOBBY)
         if (typeof pendingCreatePrivate !== 'undefined' && pendingCreatePrivate) {
             pendingCreatePrivate = false;
-            console.log('[CREATE-PRIVATE] Processing pendingCreatePrivate');
             DebugLog.log('Creating private lobby after connection', 'net');
             sendToServer({ type: 'createPrivateLobby' });
         }
@@ -4505,7 +4500,6 @@ function handleServerMessage(message) {
             break;
 
         case 'joinPrivateError':
-            console.log('[JOIN-PRIVATE] Received joinPrivateError from server:', message);
             handleJoinPrivateError(message);
             break;
 
@@ -5052,10 +5046,7 @@ function handlePrivateDisabled() {
 
 // Handle join private error
 function handleJoinPrivateError(message) {
-    console.log('[JOIN-PRIVATE] ========== handleJoinPrivateError called ==========');
-    console.log('[JOIN-PRIVATE] Error message:', message);
     const errorText = message.error || 'Failed to join private lobby';
-    console.log('[JOIN-PRIVATE] Showing error:', errorText);
     DebugLog.log(`Join private error: ${errorText}`, 'error');
 
     // Show the modal again with the error
@@ -15287,7 +15278,6 @@ function initEventListeners() {
     // Variable pendingPrivateJoin is now global (needed for socket.onopen access)
 
     function submitJoinPrivate() {
-        console.log('[JOIN-PRIVATE] submitJoinPrivate called');
         const input = document.getElementById('private-shortcode-input');
         const errorEl = document.getElementById('join-private-error');
 
@@ -15330,8 +15320,6 @@ function initEventListeners() {
     }
 
     function connectToPrivateLobby(shortcode, playerName) {
-        console.log('[JOIN-PRIVATE] connectToPrivateLobby called with:', shortcode, playerName);
-        console.log('[JOIN-PRIVATE] Socket state:', socket ? socket.readyState : 'no socket');
         hideJoinPrivateModal();
 
         // Connect to server if not connected
