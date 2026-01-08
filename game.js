@@ -1557,6 +1557,17 @@ const WeaponUpgrades = {
         this.updateShopUI();
         playSound('pickup');
         DebugLog.log(`Upgraded ${weapon} ${stat} to level ${this.levels[weapon][stat]}`, 'success');
+
+        // Sync upgrade to server for multiplayer damage calculation
+        if (GameState.isMultiplayer && GameState.isConnected) {
+            sendToServer({
+                type: 'upgradeSync',
+                weapon: weapon,
+                stat: stat,
+                level: this.levels[weapon][stat]
+            });
+        }
+
         return true;
     },
 

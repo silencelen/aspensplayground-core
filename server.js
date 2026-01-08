@@ -2098,6 +2098,12 @@ const CONFIG = {
         rocketLauncher: { damage: 250, splashDamage: 150, headshotMultiplier: 1 },
         laserGun: { damage: 25, headshotMultiplier: 1.5 }
     },
+    // Weapon upgrade multipliers (must match client WeaponUpgrades.multipliers)
+    upgradeMultipliers: {
+        damage: [1, 1.2, 1.4, 1.6, 1.85, 2.1],      // Levels 0-5
+        pellets: [1, 1.25, 1.5, 1.75, 2, 2.5]       // For shotgun
+    },
+    maxUpgradeLevel: 5,
     tickRate: 20 // Server updates per second (reduced from 20 for less lag)
 };
 
@@ -2125,6 +2131,14 @@ function createPlayer(ws, id) {
         color: colors[playerNum % colors.length],
         cosmetic: 'default',
         currentWeapon: 'pistol',  // Track current weapon for server-side damage calc
+        // Track weapon upgrade levels for damage calculation
+        weaponUpgrades: {
+            pistol: { damage: 0 },
+            smg: { damage: 0 },
+            shotgun: { damage: 0, pellets: 0 },
+            rocketLauncher: { damage: 0 },
+            laserGun: { damage: 0 }
+        },
         lastUpdate: Date.now(),
         kills: 0,
         score: 0
@@ -4445,6 +4459,13 @@ function handleMessage(playerId, message) {
                     let damage = weaponConfig.damage;
                     const isHeadshot = !!message.isHeadshot;
 
+                    // Apply weapon upgrade damage multiplier
+                    const upgradeLevel = player.weaponUpgrades[currentWeapon]?.damage || 0;
+                    if (upgradeLevel > 0 && upgradeLevel <= CONFIG.maxUpgradeLevel) {
+                        const damageMultiplier = CONFIG.upgradeMultipliers.damage[upgradeLevel] || 1;
+                        damage = Math.round(damage * damageMultiplier);
+                    }
+
                     // Apply headshot multiplier
                     if (isHeadshot && weaponConfig.headshotMultiplier) {
                         damage *= weaponConfig.headshotMultiplier;
@@ -4556,6 +4577,42 @@ function handleMessage(playerId, message) {
                 } catch (e) {
                     log(`Pong send error: ${e.message}`, 'ERROR');
                 }
+            }
+            break;
+
+        case 'upgradeSync':
+            // Sync weapon upgrade from client
+            // Validate and store upgrade level for server-side damage calculation
+            if (message.weapon && message.stat && typeof message.level === 'number') {
+                const weapon = message.weapon;
+                const stat = message.stat;
+                const level = message.level;
+
+                // Validate weapon exists
+                if (!player.weaponUpgrades[weapon]) {
+                    log(`Invalid upgrade weapon: ${weapon}`, 'WARN');
+                    break;
+                }
+
+                // Validate stat exists for this weapon
+                if (!(stat in player.weaponUpgrades[weapon])) {
+                    log(`Invalid upgrade stat ${stat} for ${weapon}`, 'WARN');
+                    break;
+                }
+
+                // Validate level is within bounds
+                if (level < 0 || level > CONFIG.maxUpgradeLevel) {
+                    log(`Invalid upgrade level ${level} (max: ${CONFIG.maxUpgradeLevel})`, 'WARN');
+                    break;
+                }
+
+                // Only allow level to increase (prevent exploit)
+                if (level <= player.weaponUpgrades[weapon][stat]) {
+                    break; // Silently ignore - not an error, just a duplicate/stale message
+                }
+
+                player.weaponUpgrades[weapon][stat] = level;
+                log(`Player ${player.name} upgraded ${weapon} ${stat} to level ${level}`, 'SHOP');
             }
             break;
 
