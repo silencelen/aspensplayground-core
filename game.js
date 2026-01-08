@@ -803,7 +803,7 @@ const SpectatorMode = {
                 <button id="spectator-prev" style="${buttonStyle}" aria-label="Previous player">&lt;</button>
                 <div style="text-align: center; flex: 1;">
                     <div style="color: #ff4444; font-size: 14px;">SPECTATING</div>
-                    <div style="color: #ffcc00; font-size: 20px;">${playerName}</div>
+                    <div style="color: #ffcc00; font-size: 20px;">${escapeHtml(playerName)}</div>
                     <div style="color: #888; font-size: 12px;">${alivePlayers.length} alive</div>
                 </div>
                 <button id="spectator-next" style="${buttonStyle}" aria-label="Next player">&gt;</button>
@@ -828,7 +828,7 @@ const SpectatorMode = {
         } else {
             ui.innerHTML = `
                 <span style="color: #ff4444;">SPECTATING</span>
-                <span style="color: #ffcc00; margin: 0 10px;">${playerName}</span>
+                <span style="color: #ffcc00; margin: 0 10px;">${escapeHtml(playerName)}</span>
                 <span style="color: #888;">(${alivePlayers.length} alive)</span>
                 ${alivePlayers.length > 1 ? '<span style="color: #666; margin-left: 15px;">[Q/E] Switch</span>' : ''}
             `;
