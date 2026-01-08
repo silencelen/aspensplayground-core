@@ -13060,6 +13060,9 @@ function startSinglePlayerGame() {
     };
     updateWeaponModel();
 
+    // Clear multiplayer session token to ensure singleplayer uses client-side score submission
+    sessionToken = null;
+
     // Reset game state
     GameState.isRunning = true;
     GameState.isGameOver = false;
