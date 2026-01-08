@@ -759,11 +759,11 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],  // Allow Three.js CDN
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdnjs.cloudflare.com", "https://unpkg.com"],  // Allow Three.js CDN, React/Recharts/Babel from unpkg
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "blob:"],
-            connectSrc: ["'self'", "ws:", "wss:", "https://cdnjs.cloudflare.com"],  // Allow WebSocket and CDN connections
+            connectSrc: ["'self'", "ws:", "wss:", "https://cdnjs.cloudflare.com", "https://api.github.com"],  // Allow WebSocket, CDN, and GitHub API
             workerSrc: ["'self'", "blob:"],
             objectSrc: ["'none'"],
             upgradeInsecureRequests: []
@@ -801,6 +801,11 @@ app.use(cors({
 // Serve static files and parse JSON
 app.use(express.static(path.join(__dirname)));
 app.use(express.json());
+
+// Clean URL for dashboard
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
 
 // ==================== API RATE LIMITING ====================
 const apiLimiter = rateLimit({
