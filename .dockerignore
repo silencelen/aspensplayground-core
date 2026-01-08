@@ -1,0 +1,39 @@
+# Dependencies
+node_modules
+
+# Development files
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Logs and runtime data
+logs
+*.log
+leaderboard.json
+
+# SSL certificates (mount at runtime)
+ssl
+
+# Electron app
+electron
+
+# Test files
+poc
+audit
+*.test.js
+
+# Documentation
+*.md
+!README.md
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
