@@ -616,6 +616,9 @@ const SpectatorMode = {
     },
 
     // Update camera position to follow spectated player
+    // Uses higher interpolation factor than mesh for smoother spectating
+    _spectatorLerpFactor: 0.4,  // Faster than mesh interpolation (0.25)
+
     updateCamera() {
         if (!this.isSpectating || !this.spectatingPlayerId) return;
 
@@ -645,16 +648,19 @@ const SpectatorMode = {
             return;
         }
 
-        // Position camera exactly at the spectated player's eye position
-        // mesh.position.y is feet-level, add CONFIG.player.height for eye level
-        const targetPos = new THREE.Vector3(
-            mesh.position.x,
-            mesh.position.y + CONFIG.player.height, // Eye height above feet
-            mesh.position.z
-        );
+        // Use targetPosition for smoother spectating (bypass slow mesh interpolation)
+        // Fall back to mesh position if targetPosition not available
+        const targetX = playerData.targetPosition ? playerData.targetPosition.x : mesh.position.x;
+        const targetY = playerData.targetPosition ? playerData.targetPosition.y : mesh.position.y;
+        const targetZ = playerData.targetPosition ? playerData.targetPosition.z : mesh.position.z;
 
-        // Instant position update for first-person feel
-        camera.position.copy(targetPos);
+        // Target eye position (feet + eye height)
+        const targetEyeY = targetY + CONFIG.player.height;
+
+        // Smooth interpolation to target for fluid spectating
+        camera.position.x = Interpolation.lerp(camera.position.x, targetX, this._spectatorLerpFactor);
+        camera.position.y = Interpolation.lerp(camera.position.y, targetEyeY, this._spectatorLerpFactor);
+        camera.position.z = Interpolation.lerp(camera.position.z, targetZ, this._spectatorLerpFactor);
 
         // Match player rotation exactly for first-person view
         // Use raw player rotation data for responsive spectating (not interpolated mesh)
