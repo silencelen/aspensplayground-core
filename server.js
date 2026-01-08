@@ -4910,7 +4910,17 @@ function handleJoinPrivate(playerId, shortcode) {
         color: colors[playerNum % colors.length],
         cosmetic: roomlessInfo?.cosmetic || 'default',
         currentWeapon: 'pistol',
+        weaponUpgrades: {
+            pistol: { damage: 0 },
+            smg: { damage: 0 },
+            shotgun: { damage: 0, pellets: 0 },
+            rocketLauncher: { damage: 0 },
+            laserGun: { damage: 0 }
+        },
         lastUpdate: Date.now(),
+        lastValidPosition: null,
+        lastPositionTime: Date.now(),
+        teleportWarnings: 0,
         kills: 0,
         score: 0
     };
@@ -5116,7 +5126,17 @@ function handlePlayAgainRequest(playerId) {
         color: colors[playerNum % colors.length],
         cosmetic: roomlessInfo.cosmetic || 'default',
         currentWeapon: 'pistol',
+        weaponUpgrades: {
+            pistol: { damage: 0 },
+            smg: { damage: 0 },
+            shotgun: { damage: 0, pellets: 0 },
+            rocketLauncher: { damage: 0 },
+            laserGun: { damage: 0 }
+        },
         lastUpdate: Date.now(),
+        lastValidPosition: null,
+        lastPositionTime: Date.now(),
+        teleportWarnings: 0,
         kills: 0,
         score: 0
     };
