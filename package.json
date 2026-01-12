@@ -18,7 +18,7 @@
     "ws": "^8.14.2"
   },
   "devDependencies": {
-    "canvas": "^3.2.0",
+    "canvas": "^3.2.1",
     "eslint": "^9.39.2",
     "md-to-pdf": "^5.2.5",
     "pdf-lib": "^1.17.1",
