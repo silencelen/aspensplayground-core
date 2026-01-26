@@ -10,12 +10,12 @@
     "build:analyze": "echo game.js: && wc -c game.js && echo game.min.js: && wc -c game.min.js 2>/dev/null || echo (run npm run build first)"
   },
   "dependencies": {
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "express": "^4.18.2",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "uuid": "^9.0.0",
-    "ws": "^8.14.2"
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "canvas": "^3.2.0",
